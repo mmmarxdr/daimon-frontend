@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme tokens — dark-first design ────────────────────────── */
+:root {
+  --color-background:          #0a0a0a;
+  --color-surface:             #111111;
+  --color-hover-surface:       #1a1a1a;
+  --color-logs-alt-row:        #0f0f0f;
+  --color-border:              #222222;
+  --color-border-strong:       #333333;
+  --color-text-primary:        #fafafa;
+  --color-text-secondary:      #888888;
+  --color-text-disabled:       #555555;
+  --color-accent-light:        rgba(16, 185, 129, 0.1);
+  --color-accent-light-border: rgba(16, 185, 129, 0.2);
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-primary font-sans;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-pulse,
+    .animate-spin,
+    .animate-bounce {
+      animation: none;
+    }
+  }
+}
