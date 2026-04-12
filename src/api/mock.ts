@@ -2,7 +2,7 @@
 // Provides in-memory implementations of the real API and WebSocket interfaces.
 // Activated when VITE_MOCK === 'true'. Never imported in production builds.
 
-import type { AgentStatus, MetricsSnapshot, Conversation, ConversationSummary, MemoryEntry } from './client'
+import type { AgentStatus, MetricsSnapshot, Conversation, ConversationSummary, MemoryEntry, MCPServer, MCPServerConfig, MCPTestResult } from './client'
 import {
   seedStatus,
   seedMetrics,
@@ -18,6 +18,7 @@ interface MockState {
   conversations: Conversation[]
   memory:        MemoryEntry[]
   config:        Record<string, unknown>
+  mcpServers:    MCPServer[]
 }
 
 // Spread copies so mutations don't corrupt the seed constants.
@@ -26,6 +27,11 @@ const mockState: MockState = {
   conversations: seedConversations.map(c => ({ ...c, messages: [...c.messages] })),
   memory:        [...seedMemory],
   config:        JSON.parse(JSON.stringify(seedConfig)),
+  mcpServers: [
+    { name: 'github', transport: 'stdio', command: 'npx -y @modelcontextprotocol/server-github', url: '', connected: true, tool_count: 8 },
+    { name: 'filesystem', transport: 'stdio', command: 'npx -y @modelcontextprotocol/server-filesystem /tmp', url: '', connected: true, tool_count: 5 },
+    { name: 'my-http-server', transport: 'http', command: '', url: 'http://localhost:8080/mcp', connected: false, tool_count: 0 },
+  ],
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -163,6 +169,39 @@ export const mockApi = {
       }
     }
     return delay({ message: 'Settings saved successfully.' })
+  },
+
+  mcpServers: (): Promise<{ servers: MCPServer[] }> =>
+    delay({ servers: mockState.mcpServers.map(s => ({ ...s })) }),
+
+  addMCPServer: (server: MCPServerConfig): Promise<MCPServerConfig> => {
+    const newServer: MCPServer = {
+      name: server.name,
+      transport: server.transport,
+      command: server.command ? server.command.join(' ') : '',
+      url: server.url ?? '',
+      connected: false,
+      tool_count: 0,
+    }
+    mockState.mcpServers.push(newServer)
+    return delay({ ...server })
+  },
+
+  removeMCPServer: (name: string): Promise<void> => {
+    mockState.mcpServers = mockState.mcpServers.filter(s => s.name !== name)
+    return delay(undefined as void)
+  },
+
+  testMCPServer: (name: string): Promise<MCPTestResult> => {
+    const server = mockState.mcpServers.find(s => s.name === name)
+    if (!server) return delay({ connected: false, error: 'Server not found' })
+    if (server.transport === 'http' && server.url.includes('localhost')) {
+      return delay({ connected: false, error: 'Connection refused: localhost:8080' }, 600)
+    }
+    const tools = ['list_files', 'read_file', 'write_file', 'search', 'execute'].slice(0, server.tool_count || 3)
+    server.connected = true
+    server.tool_count = tools.length
+    return delay({ connected: true, tools }, 800)
   },
 
   tools: () => delay([

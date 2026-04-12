@@ -11,6 +11,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Plug,
 } from 'lucide-react'
 import { useSidebar } from '../../contexts/SidebarContext'
 import { cn } from '../../lib/utils'
@@ -22,6 +23,7 @@ const navItems = [
   { to: '/memory',        label: 'Memory',        icon: Brain },
   { to: '/chat',          label: 'Chat',          icon: Bot },
   { to: '/tools',         label: 'Tools',         icon: Wrench },
+  { to: '/mcp',           label: 'Integrations',  icon: Plug },
   { to: '/settings',      label: 'Settings',      icon: Settings },
   { to: '/logs',          label: 'Logs',          icon: ScrollText },
 ]

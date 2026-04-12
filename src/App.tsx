@@ -12,6 +12,7 @@ import { ChatPage } from './pages/ChatPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ToolsPage } from './pages/ToolsPage'
 import { LogsPage } from './pages/LogsPage'
+import { MCPPage } from './pages/MCPPage'
 import { useMetricsSocket } from './hooks/useMetricsSocket'
 
 const queryClient = new QueryClient({
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="memory" element={<MemoryPage />} />
             <Route path="chat" element={<ChatPage />} />
             <Route path="tools" element={<ToolsPage />} />
+            <Route path="mcp" element={<MCPPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="logs" element={<LogsPage />} />
           </Route>

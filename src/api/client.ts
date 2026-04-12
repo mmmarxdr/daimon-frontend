@@ -121,6 +121,30 @@ export interface ModelInfo {
   free: boolean
 }
 
+export interface MCPServer {
+  name: string
+  transport: 'stdio' | 'http'
+  command: string
+  url: string
+  connected: boolean
+  tool_count: number
+}
+
+export interface MCPServerConfig {
+  name: string
+  transport: 'stdio' | 'http'
+  command?: string[]
+  url?: string
+  prefix_tools?: boolean
+  env?: Record<string, string>
+}
+
+export interface MCPTestResult {
+  connected: boolean
+  tools?: string[]
+  error?: string
+}
+
 // ─── API functions ────────────────────────────────────────────────────────────
 
 const _realApi = {
@@ -155,6 +179,11 @@ const _realApi = {
   tools: () => request<ToolInfo[]>('/tools'),
 
   models: () => request<ModelInfo[]>('/models'),
+
+  mcpServers: () => request<{ servers: MCPServer[] }>('/mcp/servers'),
+  addMCPServer: (server: MCPServerConfig) => request<MCPServerConfig>('/mcp/servers', { method: 'POST', body: JSON.stringify(server) }),
+  removeMCPServer: (name: string) => request<void>(`/mcp/servers/${name}`, { method: 'DELETE' }),
+  testMCPServer: (name: string) => request<MCPTestResult>(`/mcp/servers/${name}/test`, { method: 'POST' }),
 }
 
 // ─── WebSocket helper ─────────────────────────────────────────────────────────
