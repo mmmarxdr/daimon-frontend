@@ -168,7 +168,7 @@ export function ChatPage() {
   const [isWaiting, setIsWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoScroll, setAutoScroll] = useState(true)
-  const [hasNewMsg, setHasNewMsg] = useState(false)
+  // hasNewMsg derived below — no state needed
   const [turnStatus, setTurnStatus] = useState<TurnStatus | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -296,18 +296,17 @@ export function ChatPage() {
   useEffect(() => {
     if (autoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-      setHasNewMsg(false)
-    } else {
-      setHasNewMsg(true)
     }
   }, [messages, isTyping, autoScroll])
+
+  // Derive new-message indicator separately to avoid setState-in-effect.
+  const hasNewMessages = !autoScroll && messages.length > 0
 
   const handleScroll = () => {
     const el = scrollContainerRef.current
     if (!el) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60
     setAutoScroll(atBottom)
-    if (atBottom) setHasNewMsg(false)
   }
 
   const scrollToBottom = () => {
@@ -383,7 +382,7 @@ export function ChatPage() {
       </div>
 
       {/* Scroll-to-bottom pill */}
-      {hasNewMsg && !autoScroll && (
+      {hasNewMessages && (
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10">
           <button
             onClick={scrollToBottom}

@@ -117,11 +117,18 @@ function QuotaBar({ spent, budget }: { spent: number; budget: number }) {
   )
 }
 
+// Subset of config fields used in the overview page.
+interface ConfigOverview {
+  provider?: { type?: string; model?: string }
+  limits?: { monthly_budget_usd?: number }
+}
+
 export function OverviewPage() {
   const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useMetrics()
   const { data: memory } = useMemory('')
   const { data: config } = useConfig()
-  const budget = (config as any)?.limits?.monthly_budget_usd ?? 0
+  const cfg = config as ConfigOverview | undefined
+  const budget = cfg?.limits?.monthly_budget_usd ?? 0
 
   const fmtCost = (usd: number) => `$${usd.toFixed(4)}`
   const fmtTokens = (n: number) =>
@@ -185,8 +192,8 @@ export function OverviewPage() {
         />
         <StatCard
           label="Active model"
-          value={(config as any)?.provider?.model ?? '—'}
-          sub={(config as any)?.provider?.type ?? 'configure in Settings'}
+          value={cfg?.provider?.model ?? '—'}
+          sub={cfg?.provider?.type ?? 'configure in Settings'}
         />
       </div>
 
