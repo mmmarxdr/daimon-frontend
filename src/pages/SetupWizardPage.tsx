@@ -8,7 +8,6 @@ import {
   Zap,
 } from 'lucide-react'
 import { setupApi, type ProviderInfo, type ModelInfo } from '../api/setup'
-import { setAuthToken } from '../api/client'
 import { useSetup } from '../contexts/SetupContext'
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
@@ -235,7 +234,7 @@ function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: Crede
     update({ validating: true, validationStatus: 'idle', validationError: '' })
     try {
       const res = await setupApi.validateKey({
-        provider_type: providerId,
+        provider: providerId,
         api_key: state.apiKey,
         model: effectiveModel,
         base_url: state.baseUrl || undefined,
@@ -441,13 +440,13 @@ function DoneStep({ providerId, model, apiKey, baseUrl }: DoneStepProps) {
     setLoading(true)
     setupApi
       .complete({
-        provider_type: providerId,
+        provider: providerId,
         api_key: apiKey,
         model,
         base_url: baseUrl || undefined,
       })
       .then((res) => {
-        setAuthToken(res.auth_token)
+        // Auth cookie set automatically by the backend via Set-Cookie.
         setLoading(false)
         setDone(true)
       })
@@ -467,9 +466,9 @@ function DoneStep({ providerId, model, apiKey, baseUrl }: DoneStepProps) {
     setError(null)
     setLoading(true)
     setupApi
-      .complete({ provider_type: providerId, api_key: apiKey, model, base_url: baseUrl || undefined })
+      .complete({ provider: providerId, api_key: apiKey, model, base_url: baseUrl || undefined })
       .then((res) => {
-        setAuthToken(res.auth_token)
+        // Auth cookie set automatically by the backend via Set-Cookie.
         setLoading(false)
         setDone(true)
       })

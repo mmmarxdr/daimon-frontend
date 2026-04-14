@@ -25,6 +25,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
+    credentials: 'include',
     headers,
     ...options,
   })
@@ -196,6 +197,8 @@ export function createWebSocket(path: string): WebSocket {
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
+  // Browser sends HttpOnly cookies automatically on WebSocket handshake.
+  // Fall back to query param token for backwards compatibility.
   const token = getAuthToken()
   const url = token
     ? `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`

@@ -28,7 +28,7 @@ export interface ProvidersResponse {
 }
 
 export interface ValidateKeyRequest {
-  provider_type: string
+  provider: string
   api_key: string
   model: string
   base_url?: string
@@ -41,7 +41,7 @@ export interface ValidateKeyResponse {
 }
 
 export interface SetupCompleteRequest {
-  provider_type: string
+  provider: string
   api_key: string
   model: string
   base_url?: string
@@ -58,6 +58,7 @@ export interface SetupCompleteResponse {
 
 async function fetchNoAuth<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
@@ -90,15 +91,6 @@ export const setupApi = {
   complete: (req: SetupCompleteRequest): Promise<SetupCompleteResponse> =>
     postNoAuth<SetupCompleteResponse>('/api/setup/complete', req),
 
-  deleteConfig: (confirm: string): Promise<{ needs_setup: boolean }> => {
-    const token = localStorage.getItem('auth_token') ?? ''
-    return fetchNoAuth<{ needs_setup: boolean }>('/api/setup/reset', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ confirm }),
-    })
-  },
+  deleteConfig: (confirm: string): Promise<{ needs_setup: boolean }> =>
+    postNoAuth<{ needs_setup: boolean }>('/api/setup/reset', { confirm }),
 }

@@ -11,20 +11,18 @@ export function AuthGate({ children }: AuthGateProps) {
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
 
-  // On mount, check if stored token is still valid.
+  // On mount, verify auth by calling the API.
+  // Auth may come from an HttpOnly cookie (set by setup wizard) or
+  // a localStorage token (legacy / manual entry). Either way, the
+  // server validates — we just need to make the call.
   useEffect(() => {
-    const stored = getAuthToken()
-    if (!stored) {
-      setAuthed(false)
-      return
-    }
     api.status()
       .then(() => setAuthed(true))
       .catch((err) => {
         if (err instanceof AuthError) {
           setAuthed(false)
         } else {
-          // Network error or server down — assume token is fine, let app handle it.
+          // Network error or server down — let app handle it.
           setAuthed(true)
         }
       })
