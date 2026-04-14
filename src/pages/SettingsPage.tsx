@@ -13,6 +13,9 @@ import { Toggle } from '../components/ui/Toggle'
 import { FormField } from '../components/ui/FormField'
 import { TagInput } from '../components/ui/TagInput'
 import { Toast } from '../components/ui/Toast'
+import { DangerZoneModal } from '../components/DangerZoneModal'
+import { setupApi } from '../api/setup'
+import { useSetup } from '../contexts/SetupContext'
 import { cn } from '../lib/utils'
 
 type Tab = 'agent' | 'provider' | 'channel' | 'tools' | 'web'
@@ -28,6 +31,10 @@ const TABS: { id: Tab; label: string }[] = [
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('agent')
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
+  const [dangerModalOpen, setDangerModalOpen] = useState(false)
+  const [dangerError, setDangerError] = useState<string | null>(null)
+  const [dangerPending, setDangerPending] = useState(false)
+  const { setNeedsSetup } = useSetup()
   const qc = useQueryClient()
 
   const { data: configData, isLoading } = useQuery({
@@ -97,6 +104,20 @@ export function SettingsPage() {
       id, name: id, context_length: 0, prompt_cost: 0, completion_cost: 0, free: false,
     }))
   }, [remoteModels, selectedProvider, modelFilter])
+
+  async function handleReset() {
+    setDangerError(null)
+    setDangerPending(true)
+    try {
+      await setupApi.deleteConfig('DELETE')
+      setDangerModalOpen(false)
+      setNeedsSetup(true)
+    } catch (err) {
+      setDangerError(err instanceof Error ? err.message : 'Reset failed. Please try again.')
+    } finally {
+      setDangerPending(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -405,6 +426,51 @@ export function SettingsPage() {
       {toast && (
         <Toast message={toast.message} variant={toast.variant} onDismiss={() => setToast(null)} />
       )}
+
+      {/* ── Danger Zone ── */}
+      <div className="mt-12 pt-8 border-t border-border">
+        <div className="rounded-md border border-error/30 bg-error/5 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-error">Danger Zone</h2>
+              <p className="text-sm text-text-secondary mt-1">
+                Irreversible actions that affect your agent configuration.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-md border border-error/20 bg-[#0a0a0a] px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-text-primary">Reset Configuration</p>
+              <p className="text-xs text-text-secondary mt-0.5">
+                Clear provider settings and restart the setup wizard.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setDangerError(null)
+                setDangerModalOpen(true)
+              }}
+            >
+              Reset Configuration
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <DangerZoneModal
+        isOpen={dangerModalOpen}
+        onClose={() => {
+          setDangerModalOpen(false)
+          setDangerError(null)
+        }}
+        onConfirm={handleReset}
+        isPending={dangerPending}
+        error={dangerError}
+      />
     </div>
   )
 }
