@@ -2,7 +2,7 @@
 // Provides in-memory implementations of the real API and WebSocket interfaces.
 // Activated when VITE_MOCK === 'true'. Never imported in production builds.
 
-import type { AgentStatus, MetricsSnapshot, Conversation, ConversationSummary, MemoryEntry, MCPServer, MCPServerConfig, MCPTestResult } from './client'
+import type { AgentStatus, MetricsSnapshot, Conversation, ConversationSummary, MemoryEntry, MCPServer, MCPServerConfig, MCPTestResult, UploadResponse, MediaMeta } from './client'
 import {
   seedStatus,
   seedMetrics,
@@ -203,6 +203,16 @@ export const mockApi = {
     server.tool_count = tools.length
     return delay({ connected: true, tools }, 800)
   },
+
+  // Media
+  uploadFile: (_file: File): Promise<UploadResponse> => delay({
+    sha256: Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
+    mime: 'application/octet-stream',
+    size: 1024,
+    filename: 'mock-file.txt',
+  }, 300),
+  listMedia: (): Promise<MediaMeta[]> => delay([]),
+  deleteMedia: (_sha256: string): Promise<void> => delay(undefined as void),
 
   tools: () => delay([
     { name: 'shell_exec', description: 'Execute a shell command', schema: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } },

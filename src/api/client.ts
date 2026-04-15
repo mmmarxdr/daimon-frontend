@@ -146,6 +146,47 @@ export interface MCPTestResult {
   error?: string
 }
 
+// ─── Media types ─────────────────────────────────────────────────────────────
+
+export interface UploadResponse {
+  sha256: string
+  mime: string
+  size: number
+  filename?: string
+}
+
+export interface MediaMeta {
+  sha256: string
+  mime: string
+  size: number
+  created_at: string
+  last_referenced_at: string
+}
+
+// ─── Media upload (multipart — cannot use request<T> helper) ─────────────────
+
+async function uploadFile(file: File): Promise<UploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+
+  const headers: Record<string, string> = {}
+  const token = getAuthToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${BASE_URL}/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: form,
+  })
+  if (!res.ok) {
+    if (res.status === 401) throw new AuthError('Unauthorized')
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 // ─── API functions ────────────────────────────────────────────────────────────
 
 const _realApi = {
@@ -185,6 +226,17 @@ const _realApi = {
   addMCPServer: (server: MCPServerConfig) => request<MCPServerConfig>('/mcp/servers', { method: 'POST', body: JSON.stringify(server) }),
   removeMCPServer: (name: string) => request<void>(`/mcp/servers/${name}`, { method: 'DELETE' }),
   testMCPServer: (name: string) => request<MCPTestResult>(`/mcp/servers/${name}/test`, { method: 'POST' }),
+
+  // Media
+  uploadFile,
+  listMedia: () => request<MediaMeta[]>('/media'),
+  deleteMedia: (sha256: string) => fetch(`${BASE_URL}/media/${sha256}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { Authorization: `Bearer ${getAuthToken() ?? ''}` },
+  }).then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  }),
 }
 
 // ─── WebSocket helper ─────────────────────────────────────────────────────────

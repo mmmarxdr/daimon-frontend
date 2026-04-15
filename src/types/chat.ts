@@ -10,6 +10,13 @@ export interface ToolCall {
   isError?: boolean
 }
 
+export interface Attachment {
+  sha256: string
+  mime: string
+  size: number
+  filename: string
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
@@ -17,6 +24,15 @@ export interface ChatMessage {
   timestamp: Date
   toolCall?: ToolCall
   isStreaming?: boolean
+  attachments?: Attachment[]
+}
+
+export interface MediaMeta {
+  sha256: string
+  mime: string
+  size: number
+  created_at: string
+  last_referenced_at: string
 }
 
 export interface TurnStatus {

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Send, AlertTriangle, X, Check } from 'lucide-react'
+import { ChevronDown, ChevronRight, Send, AlertTriangle, X, Check, Paperclip, Trash2, FileText, Image, File, FolderOpen } from 'lucide-react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { StatusBar } from '../components/chat/StatusBar'
 import { cn } from '../lib/utils'
-import type { ChatMessage, ToolCall, TurnStatus } from '../types/chat'
+import { Markdown } from '../components/chat/Markdown'
+import { api } from '../api/client'
+import type { Attachment, ChatMessage, MediaMeta, ToolCall, TurnStatus } from '../types/chat'
 
 // ── Status indicator ────────────────────────────────────────────────────────
 function ConnectionStatus({ status }: { status: string }) {
@@ -137,13 +139,28 @@ function MessageRow({ msg }: { msg: ChatMessage }) {
         ? 'border-l-2 border-l-accent'
         : 'border-l-2 border-l-border-strong'
     )}>
-      <p className={cn(
-        'text-sm leading-relaxed text-text-primary whitespace-pre-wrap break-words',
-        !isUser && 'font-mono'
-      )}>
-        {msg.content}
-        {msg.isStreaming && <span className="animate-pulse ml-0.5 text-accent">▋</span>}
-      </p>
+      {isUser ? (
+        <>
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-1.5">
+              {msg.attachments.map(att => (
+                <span key={att.sha256} className="inline-flex items-center gap-1 bg-surface border border-border rounded px-1.5 py-0.5 text-xs text-text-secondary">
+                  <FileIcon mime={att.mime} className="w-3 h-3" />
+                  <span className="truncate max-w-[100px]">{att.filename}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap break-words">
+            {msg.content}
+          </p>
+        </>
+      ) : (
+        <div className="break-words">
+          <Markdown content={msg.content} />
+          {msg.isStreaming && <span className="animate-pulse ml-0.5 text-accent">▋</span>}
+        </div>
+      )}
       <p className="text-xs text-text-disabled font-mono mt-1">
         {isUser ? '> you' : '$ agent'} · {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </p>
@@ -160,6 +177,114 @@ function TypingIndicator() {
   )
 }
 
+// ── File icon by MIME ───────────────────────────────────────────────────────
+function FileIcon({ mime, className }: { mime: string; className?: string }) {
+  if (mime.startsWith('image/')) return <Image className={className} />
+  if (mime.startsWith('text/'))  return <FileText className={className} />
+  return <File className={className} />
+}
+
+// ── Format file size ────────────────────────────────────────────────────────
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// ── Pending attachment pill (below input) ───────────────────────────────────
+function AttachmentPill({ att, onRemove }: { att: Attachment; onRemove: () => void }) {
+  return (
+    <div className="flex items-center gap-1.5 bg-surface border border-border rounded px-2 py-1 text-xs text-text-secondary">
+      <FileIcon mime={att.mime} className="w-3 h-3 flex-shrink-0" />
+      <span className="truncate max-w-[120px]">{att.filename}</span>
+      <span className="text-text-disabled">{formatSize(att.size)}</span>
+      <button onClick={onRemove} className="ml-0.5 hover:text-error transition-colors">
+        <X size={12} />
+      </button>
+    </div>
+  )
+}
+
+// ── Files drawer ────────────────────────────────────────────────────────────
+function FilesDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [files, setFiles] = useState<MediaMeta[]>([])
+  const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    api.listMedia()
+      .then(setFiles)
+      .catch(() => setFiles([]))
+      .finally(() => setLoading(false))
+  }, [open])
+
+  const handleDelete = async (sha256: string) => {
+    setDeleting(sha256)
+    try {
+      await api.deleteMedia(sha256)
+      setFiles(prev => prev.filter(f => f.sha256 !== sha256))
+    } catch {
+      // silently fail — file might already be gone
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      {/* Drawer */}
+      <div className="fixed right-0 top-0 bottom-0 w-80 bg-background border-l border-border z-50 flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-text-primary">Uploaded Files</h2>
+          <button onClick={onClose} className="text-text-secondary hover:text-text-primary">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <span className="w-5 h-5 border-2 border-border border-t-accent rounded-full animate-spin" />
+            </div>
+          )}
+          {!loading && files.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+              <FolderOpen size={24} className="text-text-disabled mb-2" />
+              <p className="text-xs text-text-disabled font-mono">No files uploaded yet.</p>
+            </div>
+          )}
+          {!loading && files.map(f => (
+            <div key={f.sha256} className="flex items-center gap-3 px-4 py-2.5 border-b border-border hover:bg-hover-surface transition-colors">
+              <FileIcon mime={f.mime} className="w-4 h-4 text-text-secondary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-text-primary font-mono truncate">{f.sha256.slice(0, 12)}…</p>
+                <p className="text-[10px] text-text-disabled">
+                  {f.mime} · {formatSize(f.size)} · {new Date(f.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <button
+                onClick={() => handleDelete(f.sha256)}
+                disabled={deleting === f.sha256}
+                className="text-text-disabled hover:text-error transition-colors disabled:opacity-50"
+              >
+                {deleting === f.sha256
+                  ? <span className="w-3.5 h-3.5 border-2 border-border border-t-error rounded-full animate-spin inline-block" />
+                  : <Trash2 size={14} />
+                }
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────
 export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -170,10 +295,14 @@ export function ChatPage() {
   const [autoScroll, setAutoScroll] = useState(true)
   // hasNewMsg derived below — no state needed
   const [turnStatus, setTurnStatus] = useState<TurnStatus | null>(null)
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [filesDrawerOpen, setFilesDrawerOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── WebSocket message handler
   const handleWsMessage = useCallback((data: unknown) => {
@@ -314,18 +443,49 @@ export function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // ── File upload
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = '' // reset so same file can be re-selected
+    setIsUploading(true)
+    setError(null)
+    try {
+      const res = await api.uploadFile(file)
+      setPendingAttachments(prev => [...prev, {
+        sha256: res.sha256,
+        mime: res.mime,
+        size: res.size,
+        filename: file.name,
+      }])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   // ── Send
   const handleSend = () => {
     const text = input.trim()
-    if (!text || isWaiting) return
-    setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', content: text, timestamp: new Date() }])
+    if (!text && pendingAttachments.length === 0) return
+    if (isWaiting) return
+    const attachments = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined
+    setMessages(prev => [...prev, {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text || (attachments ? `[${attachments.map(a => a.filename).join(', ')}]` : ''),
+      timestamp: new Date(),
+      attachments,
+    }])
     setInput('')
+    setPendingAttachments([])
     setIsTyping(true)
     setIsWaiting(true)
     setError(null)
     setAutoScroll(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
-    send({ type: 'message', text })
+    send({ type: 'message', text, attachments })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -349,7 +509,16 @@ export function ChatPage() {
           <h1 className="text-[15px] font-semibold text-text-primary">Chat</h1>
           <p className="text-xs text-text-secondary">Talk to the agent directly from the browser.</p>
         </div>
-        <ConnectionStatus status={status} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setFilesDrawerOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <FolderOpen size={14} />
+            <span>Files</span>
+          </button>
+          <ConnectionStatus status={status} />
+        </div>
       </div>
 
       {/* Error banner */}
@@ -398,7 +567,42 @@ export function ChatPage() {
 
       {/* Input area */}
       <div className="shrink-0 border-t border-border bg-background px-4 py-3">
+        {/* Pending attachments */}
+        {pendingAttachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {pendingAttachments.map(att => (
+              <AttachmentPill
+                key={att.sha256}
+                att={att}
+                onRemove={() => setPendingAttachments(prev => prev.filter(a => a.sha256 !== att.sha256))}
+              />
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          {/* Attach button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading || isWaiting}
+            className={cn(
+              'shrink-0 h-10 w-10 flex items-center justify-center rounded-md border border-border text-text-secondary',
+              'hover:text-text-primary hover:border-border-strong transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+            title="Attach file"
+          >
+            {isUploading
+              ? <span className="w-4 h-4 border-2 border-border border-t-accent rounded-full animate-spin" />
+              : <Paperclip size={16} />
+            }
+          </button>
           <textarea
             ref={textareaRef}
             value={input}
@@ -416,7 +620,7 @@ export function ChatPage() {
           />
           <Button
             onClick={handleSend}
-            disabled={!input.trim() || isWaiting || status !== 'connected'}
+            disabled={(!input.trim() && pendingAttachments.length === 0) || isWaiting || status !== 'connected'}
             className="shrink-0 h-10 w-10 p-0 flex items-center justify-center"
           >
             {isWaiting
@@ -429,6 +633,9 @@ export function ChatPage() {
           Enter to send · Shift+Enter for new line
         </p>
       </div>
+
+      {/* Files drawer */}
+      <FilesDrawer open={filesDrawerOpen} onClose={() => setFilesDrawerOpen(false)} />
     </div>
   )
 }
