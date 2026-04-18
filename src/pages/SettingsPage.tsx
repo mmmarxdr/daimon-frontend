@@ -4,8 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { ModelInfo } from '../api/client'
-import { configSchema, DEFAULT_CONFIG, KNOWN_MODELS, MASKED_VALUE } from '../schemas/config'
-import type { ConfigFormData } from '../schemas/config'
+import { configSchema, DEFAULT_CONFIG, KNOWN_MODELS, MASKED_REGEX, PROVIDER_NAMES } from '../schemas/config'
+import type { ConfigFormData, ProviderName } from '../schemas/config'
+import { stripMaskedKeys } from '../lib/mask'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
@@ -28,12 +29,23 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'web',      label: 'Web' },
 ]
 
+const PROVIDER_LABELS: Record<ProviderName, string> = {
+  anthropic:  'Anthropic',
+  openai:     'OpenAI',
+  gemini:     'Gemini',
+  openrouter: 'OpenRouter',
+  ollama:     'Ollama',
+}
+
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('agent')
+  const [activeProviderTab, setActiveProviderTab] = useState<ProviderName>('openrouter')
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
   const [dangerModalOpen, setDangerModalOpen] = useState(false)
   const [dangerError, setDangerError] = useState<string | null>(null)
   const [dangerPending, setDangerPending] = useState(false)
+  const [warnModalOpen, setWarnModalOpen] = useState(false)
+  const [pendingSubmitData, setPendingSubmitData] = useState<ConfigFormData | null>(null)
   const { setNeedsSetup } = useSetup()
   const qc = useQueryClient()
 
@@ -50,7 +62,8 @@ export function SettingsPage() {
     watch,
     formState: { errors, isDirty },
   } = useForm<ConfigFormData>({
-    resolver: zodResolver(configSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(configSchema) as any,
     defaultValues: DEFAULT_CONFIG,
   })
 
@@ -62,13 +75,13 @@ export function SettingsPage() {
     mutationFn: (data: ConfigFormData) => {
       const payload = JSON.parse(JSON.stringify(data)) as Record<string, unknown>
       const p = payload as {
-        provider?: { api_key?: string }
+        providers?: Record<string, { api_key?: string; base_url?: string }>
         web?: { auth_token?: string }
         channel?: { token?: string }
       }
-      if (p.provider?.api_key === MASKED_VALUE) delete p.provider.api_key
-      if (p.web?.auth_token === MASKED_VALUE) delete p.web.auth_token
-      if (p.channel?.token === MASKED_VALUE) delete p.channel.token
+      if (p.providers) p.providers = stripMaskedKeys(p.providers)
+      if (p.web?.auth_token && MASKED_REGEX.test(p.web.auth_token)) delete p.web.auth_token
+      if (p.channel?.token && MASKED_REGEX.test(p.channel.token)) delete p.channel.token
       return api.updateConfig(payload)
     },
     onSuccess: () => {
@@ -80,9 +93,11 @@ export function SettingsPage() {
     },
   })
 
-  const selectedProvider = watch('provider.type')
+  const activeProvider = watch('models.default.provider')
+  const activeProviderKey = watch(`providers.${activeProvider}.api_key`)
   const activeChannel = watch('channel.type')
   const shellAllowAll = watch('tools.shell.allow_all')
+  const currentModel = watch('models.default.model')
 
   const { data: remoteModels } = useQuery<ModelInfo[]>({
     queryKey: ['models'],
@@ -94,16 +109,56 @@ export function SettingsPage() {
   const [modelFilter, setModelFilter] = useState('')
 
   const modelOptions = useMemo(() => {
-    if (remoteModels && remoteModels.length > 0 && selectedProvider === 'openrouter') {
+    let base: ModelInfo[]
+    if (remoteModels && remoteModels.length > 0 && activeProvider === 'openrouter') {
       const lf = modelFilter.toLowerCase()
-      return remoteModels
+      base = remoteModels
         .filter(m => !lf || m.id.toLowerCase().includes(lf) || m.name.toLowerCase().includes(lf))
         .slice(0, 50)
+    } else {
+      base = (KNOWN_MODELS[activeProvider] ?? []).map(id => ({
+        id, name: id, context_length: 0, prompt_cost: 0, completion_cost: 0, free: false,
+      }))
     }
-    return (KNOWN_MODELS[selectedProvider] ?? []).map(id => ({
-      id, name: id, context_length: 0, prompt_cost: 0, completion_cost: 0, free: false,
-    }))
-  }, [remoteModels, selectedProvider, modelFilter])
+    // Inject current model if not in the list (FR-33 / AS-22)
+    if (currentModel && !base.find(m => m.id === currentModel)) {
+      return [{ id: currentModel, name: currentModel, context_length: 0, prompt_cost: 0, completion_cost: 0, free: false }, ...base]
+    }
+    return base
+  }, [remoteModels, activeProvider, modelFilter, currentModel])
+
+  function needsProviderWarning(): boolean {
+    if (activeProvider === 'ollama') return false
+    // If there's a real (non-masked, non-empty) key being entered, no warning
+    if (activeProviderKey && !MASKED_REGEX.test(activeProviderKey)) return false
+    // Check stored config — if stored config has a masked key, that IS a real key on the server
+    const stored = configData as ConfigFormData | undefined
+    const storedKey = stored?.providers?.[activeProvider]?.api_key
+    if (storedKey && storedKey !== '') return false
+    return true
+  }
+
+  function onSubmit(data: ConfigFormData) {
+    if (needsProviderWarning()) {
+      setPendingSubmitData(data)
+      setWarnModalOpen(true)
+      return
+    }
+    saveConfig(data)
+  }
+
+  function handleWarnConfirm() {
+    setWarnModalOpen(false)
+    if (pendingSubmitData) {
+      saveConfig(pendingSubmitData)
+      setPendingSubmitData(null)
+    }
+  }
+
+  function handleWarnCancel() {
+    setWarnModalOpen(false)
+    setPendingSubmitData(null)
+  }
 
   async function handleReset() {
     setDangerError(null)
@@ -139,7 +194,7 @@ export function SettingsPage() {
           <p className="text-sm text-text-secondary mt-0.5">Configure the agent without editing YAML.</p>
         </div>
         <Button
-          onClick={handleSubmit(d => saveConfig(d))}
+          onClick={handleSubmit(onSubmit)}
           disabled={isPending || !isDirty}
         >
           {isPending ? 'Saving...' : 'Save'}
@@ -165,11 +220,11 @@ export function SettingsPage() {
       </div>
 
       {/* Content */}
-      <form onSubmit={handleSubmit(d => saveConfig(d))} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
         {/* ── Agent ── */}
-        {activeTab === 'agent' && (
-          <>
+        <div className={cn(activeTab !== 'agent' && 'hidden')}>
+          <div className="space-y-5">
             <FormField label="Agent name" error={errors.agent?.name?.message} required>
               <Input {...register('agent.name')} placeholder="MicroAgent" />
             </FormField>
@@ -197,35 +252,32 @@ export function SettingsPage() {
                 <Input type="number" min={0} {...register('agent.memory_results', { valueAsNumber: true })} />
               </FormField>
             </div>
-          </>
-        )}
+          </div>
+        </div>
 
         {/* ── Provider ── */}
-        {activeTab === 'provider' && (
-          <>
+        <div className={cn(activeTab !== 'provider' && 'hidden')}>
+          <div className="space-y-5">
+            {/* Active provider + model selectors */}
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="Provider" error={errors.provider?.type?.message}>
-                <Select {...register('provider.type')}>
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="ollama">Ollama</option>
-                  <option value="gemini">Gemini</option>
+              <FormField label="Active provider" error={errors.models?.default?.provider?.message}>
+                <Select aria-label="Active provider" {...register('models.default.provider')}>
+                  {PROVIDER_NAMES.map(p => (
+                    <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
+                  ))}
                 </Select>
               </FormField>
-              <FormField label="Max retries">
-                <Input type="number" min={0} {...register('provider.max_retries', { valueAsNumber: true })} />
-              </FormField>
             </div>
-            <FormField label="Model" error={errors.provider?.model?.message} required>
-              {selectedProvider === 'openrouter' && remoteModels && remoteModels.length > 0 ? (
+
+            <FormField label="Model" error={errors.models?.default?.model?.message} required>
+              {activeProvider === 'openrouter' && remoteModels && remoteModels.length > 0 ? (
                 <div className="space-y-2">
                   <Input
                     value={modelFilter}
                     onChange={e => setModelFilter(e.target.value)}
                     placeholder="Search models..."
                   />
-                  <Select {...register('provider.model')}>
+                  <Select aria-label="Model" {...register('models.default.model')}>
                     {modelOptions.map(m => (
                       <option key={m.id} value={m.id}>
                         {m.name}{m.free ? ' (free)' : m.prompt_cost > 0 ? ` ($${m.prompt_cost}/M)` : ''}
@@ -237,32 +289,62 @@ export function SettingsPage() {
                   </p>
                 </div>
               ) : (
-                <Select {...register('provider.model')}>
+                <Select aria-label="Model" {...register('models.default.model')}>
                   {modelOptions.map(m => (
                     <option key={m.id} value={m.id}>{m.id}</option>
                   ))}
                 </Select>
               )}
             </FormField>
-            <FormField label="API key" hint="Leave unchanged to keep existing.">
-              <Input type="password" {...register('provider.api_key')} placeholder="sk-..." autoComplete="off" />
-            </FormField>
-            <FormField label="Base URL" hint="Override endpoint (optional).">
-              <Input {...register('provider.base_url')} placeholder="https://api.example.com" />
-            </FormField>
-            <Controller
-              name="provider.stream"
-              control={control}
-              render={({ field }) => (
-                <Toggle checked={field.value ?? true} onChange={field.onChange} label="Streaming" description="Stream tokens as they arrive" />
-              )}
-            />
-          </>
-        )}
+
+            {/* Provider credentials sub-tabs */}
+            <div>
+              <p className="text-xs font-medium text-text-secondary mb-2">Provider Credentials</p>
+              {/* Sub-tab strip */}
+              <div className="flex gap-1 mb-4 bg-surface rounded-lg p-1 border border-border">
+                {PROVIDER_NAMES.map(p => (
+                  <button
+                    type="button"
+                    key={p}
+                    onClick={() => setActiveProviderTab(p)}
+                    className={cn(
+                      'flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors',
+                      activeProviderTab === p
+                        ? 'bg-hover-surface text-text-primary'
+                        : 'text-text-secondary hover:text-text-primary'
+                    )}
+                  >
+                    {PROVIDER_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+
+              {/* All provider panes — CSS hidden for inactive tabs (NOT conditional render) */}
+              {PROVIDER_NAMES.map(providerName => (
+                <div key={providerName} className={cn('space-y-4', activeProviderTab !== providerName && 'hidden')}>
+                  <FormField label="API key" hint="Leave unchanged to keep existing.">
+                    <Input
+                      type="password"
+                      {...register(`providers.${providerName}.api_key`)}
+                      placeholder="sk-..."
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField label="Base URL" hint="Override endpoint (optional).">
+                    <Input
+                      {...register(`providers.${providerName}.base_url`)}
+                      placeholder={providerName === 'ollama' ? 'http://localhost:11434' : 'https://api.example.com'}
+                    />
+                  </FormField>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* ── Channel ── */}
-        {activeTab === 'channel' && (
-          <>
+        <div className={cn(activeTab !== 'channel' && 'hidden')}>
+          <div className="space-y-5">
             <FormField label="Channel type">
               <Select {...register('channel.type')}>
                 <option value="cli">CLI</option>
@@ -270,10 +352,10 @@ export function SettingsPage() {
                 <option value="discord">Discord</option>
               </Select>
             </FormField>
-            {activeChannel === 'telegram' && (
+            {(activeChannel === 'telegram' || activeChannel === 'discord') && (
               <>
                 <FormField label="Bot token" hint="Leave unchanged to keep existing.">
-                  <Input type="password" {...register('channel.token')} placeholder="1234567890:ABC..." autoComplete="off" />
+                  <Input type="password" {...register('channel.token')} placeholder={activeChannel === 'telegram' ? '1234567890:ABC...' : 'Bot token...'} autoComplete="off" />
                 </FormField>
                 <FormField label="Allowed user IDs" hint="Press Enter to add.">
                   <Controller
@@ -284,39 +366,18 @@ export function SettingsPage() {
                       <TagInput
                         value={(field.value ?? []).map(String)}
                         onChange={vals => field.onChange(vals.map(Number))}
-                        placeholder="123456789"
+                        placeholder={activeChannel === 'telegram' ? '123456789' : 'User ID'}
                       />
                     )}
                   />
                 </FormField>
               </>
             )}
-            {activeChannel === 'discord' && (
-              <>
-                <FormField label="Bot token" hint="Leave unchanged to keep existing.">
-                  <Input type="password" {...register('channel.token')} placeholder="Bot token..." autoComplete="off" />
-                </FormField>
-                <FormField label="Allowed user IDs" hint="Press Enter to add.">
-                  <Controller
-                    name="channel.allowed_users"
-                    control={control}
-                    defaultValue={[]}
-                    render={({ field }) => (
-                      <TagInput
-                        value={(field.value ?? []).map(String)}
-                        onChange={vals => field.onChange(vals.map(Number))}
-                        placeholder="User ID"
-                      />
-                    )}
-                  />
-                </FormField>
-              </>
-            )}
-          </>
-        )}
+          </div>
+        </div>
 
         {/* ── Tools ── */}
-        {activeTab === 'tools' && (
+        <div className={cn(activeTab !== 'tools' && 'hidden')}>
           <div className="space-y-6">
             {/* Shell */}
             <div className="border border-border rounded-md p-4 space-y-4">
@@ -395,11 +456,11 @@ export function SettingsPage() {
               </FormField>
             </div>
           </div>
-        )}
+        </div>
 
         {/* ── Web ── */}
-        {activeTab === 'web' && (
-          <>
+        <div className={cn(activeTab !== 'web' && 'hidden')}>
+          <div className="space-y-5">
             <Controller
               name="web.enabled"
               control={control}
@@ -418,13 +479,43 @@ export function SettingsPage() {
             <FormField label="Auth token" hint="Leave blank to auto-generate on startup.">
               <Input type="password" {...register('web.auth_token')} autoComplete="off" />
             </FormField>
-          </>
-        )}
+          </div>
+        </div>
 
       </form>
 
       {toast && (
         <Toast message={toast.message} variant={toast.variant} onDismiss={() => setToast(null)} />
+      )}
+
+      {/* ── Provider-switch warning modal ── */}
+      {warnModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="provider-warn-title"
+        >
+          <div className="absolute inset-0 bg-black/70" onClick={handleWarnCancel} aria-hidden="true" />
+          <div className="relative z-10 w-full max-w-md mx-4 bg-[#111111] border border-[#222222] rounded-md p-6 space-y-4">
+            <h2 id="provider-warn-title" className="text-sm font-semibold text-text-primary">
+              No credentials configured
+            </h2>
+            <p className="text-sm text-text-secondary">
+              The selected provider (<strong>{activeProvider}</strong>) has no API key configured.
+              The agent will fail to call this provider until you add credentials.
+              Save anyway?
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={handleWarnCancel}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleWarnConfirm}>
+                Save anyway
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Danger Zone ── */}

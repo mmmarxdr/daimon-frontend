@@ -33,7 +33,7 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
       openai:     { api_key: '', base_url: '' },
       gemini:     { api_key: '', base_url: '' },
       openrouter: { api_key: 'sk-or-real', base_url: '' },
-      ollama:     { api_key: '', base_url: 'http://localhost:11434' },
+      ollama:     { api_key: '', base_url: '' },
     },
     models: { default: { provider: 'openrouter', model: 'openrouter/auto' } },
     channel: { type: 'cli', token: '', allowed_users: [] },
@@ -78,6 +78,13 @@ describe('SettingsPage.currentModelInjected', () => {
   it('injects current model into dropdown even when not in remote list', async () => {
     const currentModel = 'anthropic/claude-haiku-4.5'
     const configVal = makeConfig({
+      providers: {
+        anthropic:  { api_key: '', base_url: '' },
+        openai:     { api_key: '', base_url: '' },
+        gemini:     { api_key: '', base_url: '' },
+        openrouter: { api_key: 'sk-or-real', base_url: '' },
+        ollama:     { api_key: '', base_url: '' },
+      },
       models: { default: { provider: 'openrouter', model: currentModel } },
     })
     ;(api.config as ReturnType<typeof vi.fn>).mockResolvedValue(configVal)
@@ -96,17 +103,20 @@ describe('SettingsPage.currentModelInjected', () => {
     renderSettings()
 
     // Navigate to Provider tab
-    await waitFor(() => screen.getByRole('button', { name: /provider/i }))
-    fireEvent.click(screen.getByRole('button', { name: /provider/i }))
+    await waitFor(() => screen.getByRole('button', { name: /^provider$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^provider$/i }))
 
     // Wait for config to load and form to populate
     await waitFor(() => {
-      const select = screen.getByRole('combobox', { name: /model/i }) as HTMLSelectElement
+      const selects = screen.getAllByRole('combobox')
+      // Find the model select (aria-label="Model")
+      const modelSelect = selects.find(s => s.getAttribute('aria-label') === 'Model') as HTMLSelectElement | undefined
+      if (!modelSelect) throw new Error('Model select not found')
       // The current model must be present as an option
-      const options = Array.from(select.options).map(o => o.value)
+      const options = Array.from(modelSelect.options).map(o => o.value)
       expect(options).toContain(currentModel)
       // And it should be selected
-      expect(select.value).toBe(currentModel)
+      expect(modelSelect.value).toBe(currentModel)
     }, { timeout: 3000 })
   })
 })
@@ -118,27 +128,32 @@ describe('SettingsPage.tabSwitch', () => {
 
     renderSettings()
 
-    await waitFor(() => screen.getByRole('button', { name: /provider/i }))
-    fireEvent.click(screen.getByRole('button', { name: /provider/i }))
+    await waitFor(() => screen.getByRole('button', { name: /^provider$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^provider$/i }))
 
     // Navigate to Anthropic sub-tab
-    await waitFor(() => screen.getByRole('button', { name: /anthropic/i }))
-    fireEvent.click(screen.getByRole('button', { name: /anthropic/i }))
+    await waitFor(() => screen.getByRole('button', { name: /^anthropic$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^anthropic$/i }))
 
-    // Type an unsaved value
-    const apiKeyInput = screen.getByPlaceholderText('sk-...')
+    // Find anthropic api_key by name attribute (since all tabs are mounted)
+    await waitFor(() => {
+      const input = document.querySelector('input[name="providers.anthropic.api_key"]') as HTMLInputElement
+      expect(input).toBeTruthy()
+    })
+
+    const apiKeyInput = document.querySelector('input[name="providers.anthropic.api_key"]') as HTMLInputElement
     fireEvent.change(apiKeyInput, { target: { value: 'sk-ant-unsaved' } })
-    expect((apiKeyInput as HTMLInputElement).value).toBe('sk-ant-unsaved')
+    expect(apiKeyInput.value).toBe('sk-ant-unsaved')
 
     // Switch to OpenRouter sub-tab
-    fireEvent.click(screen.getByRole('button', { name: /openrouter/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^openrouter$/i }))
 
     // Switch back to Anthropic
-    fireEvent.click(screen.getByRole('button', { name: /anthropic/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^anthropic$/i }))
 
     // Value should be preserved (hidden, not unmounted)
-    const preserved = screen.getByPlaceholderText('sk-...')
-    expect((preserved as HTMLInputElement).value).toBe('sk-ant-unsaved')
+    const preserved = document.querySelector('input[name="providers.anthropic.api_key"]') as HTMLInputElement
+    expect(preserved.value).toBe('sk-ant-unsaved')
   })
 })
 
@@ -160,11 +175,21 @@ describe('SettingsPage.maskedStrip', () => {
 
     renderSettings()
 
-    await waitFor(() => screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => screen.getByRole('button', { name: /^save$/i }))
 
-    // Click save WITHOUT modifying the masked api_key
+    // Make form dirty by changing a field so Save is enabled
+    fireEvent.click(screen.getByRole('button', { name: /^agent$/i }))
+    await waitFor(() => {
+      const nameInput = document.querySelector('input[name="agent.name"]') as HTMLInputElement
+      expect(nameInput).toBeTruthy()
+    })
+    const nameInput = document.querySelector('input[name="agent.name"]') as HTMLInputElement
+    fireEvent.change(nameInput, { target: { value: 'TestAgent-dirty' } })
+
+    // Click save
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      const saveBtn = screen.getByRole('button', { name: /^save$/i })
+      fireEvent.click(saveBtn)
     })
 
     await waitFor(() => expect(api.updateConfig).toHaveBeenCalled())
@@ -194,31 +219,37 @@ describe('SettingsPage.providerSwitchWarning', () => {
 
     renderSettings()
 
-    await waitFor(() => screen.getByRole('button', { name: /provider/i }))
-    fireEvent.click(screen.getByRole('button', { name: /provider/i }))
+    await waitFor(() => screen.getByRole('button', { name: /^provider$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^provider$/i }))
 
-    // Change active provider to anthropic (which has no credentials)
-    await waitFor(() => screen.getByRole('combobox', { name: /active provider/i }))
-    fireEvent.change(screen.getByRole('combobox', { name: /active provider/i }), {
-      target: { value: 'anthropic' },
+    // Change active provider to anthropic (which has no credentials) using aria-label
+    await waitFor(() => {
+      const sel = document.querySelector('select[name="models.default.provider"]') as HTMLSelectElement
+      expect(sel).toBeTruthy()
     })
 
+    const providerSelect = document.querySelector('select[name="models.default.provider"]') as HTMLSelectElement
+    fireEvent.change(providerSelect, { target: { value: 'anthropic' } })
+
+    // Make form dirty so Save is enabled (the provider change should already do it)
     // Click Save — should trigger warning
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      const saveBtn = screen.getByRole('button', { name: /^save$/i })
+      fireEvent.click(saveBtn)
     })
 
     // Dialog should appear
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
-      expect(screen.getByText(/credentials/i)).toBeInTheDocument()
+      // Look for the warning modal heading specifically
+      expect(screen.getByRole('heading', { name: /no credentials configured/i })).toBeInTheDocument()
     })
 
     // PUT should NOT have been called yet
     expect(api.updateConfig).not.toHaveBeenCalled()
 
     // Confirm — now PUT should fire
-    const confirmBtn = screen.getByRole('button', { name: /confirm|save anyway/i })
+    const confirmBtn = screen.getByRole('button', { name: /save anyway/i })
     await act(async () => {
       fireEvent.click(confirmBtn)
     })

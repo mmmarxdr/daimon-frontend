@@ -26,12 +26,6 @@ export const configSchema = z.object({
     gemini:     providerCredsSchema,
     openrouter: providerCredsSchema,
     ollama:     providerCredsSchema,
-  }).default({
-    anthropic:  { api_key: '', base_url: '' },
-    openai:     { api_key: '', base_url: '' },
-    gemini:     { api_key: '', base_url: '' },
-    openrouter: { api_key: '', base_url: '' },
-    ollama:     { api_key: '', base_url: '' },
   }),
   models: z.object({
     default: z.object({
