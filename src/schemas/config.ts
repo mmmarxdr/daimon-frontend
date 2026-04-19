@@ -101,7 +101,7 @@ export const KNOWN_MODELS: Record<ProviderName, string[]> = {
 }
 
 export const DEFAULT_CONFIG: ConfigFormData = {
-  agent: { name: 'MicroAgent', personality: '', max_iterations: 10, max_tokens_per_turn: 4096, history_length: 20, memory_results: 5 },
+  agent: { name: 'Daimon', personality: '', max_iterations: 10, max_tokens_per_turn: 4096, history_length: 20, memory_results: 5 },
   providers: {
     anthropic:  { api_key: '', base_url: '' },
     openai:     { api_key: '', base_url: '' },

@@ -66,7 +66,7 @@ export function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
         {collapsed && !drawerOpen ? (
           <span className="text-[15px] font-semibold text-text-primary">M</span>
         ) : (
-          <span className="text-[15px] font-semibold text-text-primary">MicroAgent</span>
+          <span className="text-[15px] font-semibold text-text-primary">Daimon</span>
         )}
         {/* Close button — only in overlay/drawer mode */}
         {drawerOpen && (

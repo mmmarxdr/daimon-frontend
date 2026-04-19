@@ -21,7 +21,7 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npm run build
 
-      # Package dist/ as a tarball for micro-claw to consume.
+      # Package dist/ as a tarball for daimon to consume.
       - name: Package frontend assets
         run: tar -czf frontend-dist.tar.gz -C dist .
 

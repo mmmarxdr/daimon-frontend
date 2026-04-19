@@ -191,7 +191,7 @@ describe('AuthGate — no localStorage writes for auth (FR-39, INV-4)', () => {
     await waitFor(() => expect(screen.getByText('dashboard')).toBeInTheDocument())
 
     const authWrites = localStorageSetItemSpy.mock.calls.filter(([key]) =>
-      key === 'microagent_auth_token' || key?.toString().includes('auth_token')
+      key === 'daimon_auth_token' || key?.toString().includes('auth_token')
     )
     expect(authWrites).toHaveLength(0)
   })
@@ -212,7 +212,7 @@ describe('AuthGate — no localStorage writes for auth (FR-39, INV-4)', () => {
     await waitFor(() => expect(screen.getByText(/invalid token/i)).toBeInTheDocument())
 
     const authWrites = localStorageSetItemSpy.mock.calls.filter(([key]) =>
-      key === 'microagent_auth_token' || key?.toString().includes('auth_token')
+      key === 'daimon_auth_token' || key?.toString().includes('auth_token')
     )
     expect(authWrites).toHaveLength(0)
   })

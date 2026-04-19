@@ -364,7 +364,7 @@ export const seedMemory: MemoryEntry[] = [
 
 export const seedConfig: Record<string, unknown> = {
   agent: {
-    name:           'MicroAgent',
+    name:           'Daimon',
     system_prompt:  'You are a helpful AI assistant with access to shell, file, and HTTP tools. Always ask for confirmation before running destructive commands.',
     max_iterations: 10,
     max_tokens:     4096,

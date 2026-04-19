@@ -96,7 +96,7 @@ describe('client.ts — no localStorage writes for auth (FR-39, INV-4)', () => {
     localStorageSetItemSpy.mockClear()
     await import('../client')
     const authWrites = localStorageSetItemSpy.mock.calls.filter(([key]) =>
-      key === 'microagent_auth_token' || key?.toString().includes('auth')
+      key === 'daimon_auth_token' || key?.toString().includes('auth')
     )
     expect(authWrites).toHaveLength(0)
   })

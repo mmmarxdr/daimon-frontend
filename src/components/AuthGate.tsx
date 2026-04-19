@@ -103,7 +103,7 @@ export function AuthGate({ children }: AuthGateProps) {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-neutral-900 border border-neutral-800">
             <KeyRound className="w-5 h-5 text-neutral-400" />
           </div>
-          <h1 className="text-lg font-semibold text-white">microagent</h1>
+          <h1 className="text-lg font-semibold text-white">Daimon</h1>
           <p className="text-sm text-neutral-500">
             Enter the auth token shown in the server console.
           </p>

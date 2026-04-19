@@ -1,4 +1,4 @@
-# Skill Registry — micro-claw-frontend
+# Skill Registry — daimon-frontend
 
 ## User Skills
 
