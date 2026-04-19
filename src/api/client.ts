@@ -1,28 +1,9 @@
 const BASE_URL = '/api'
-const TOKEN_KEY = 'microagent_auth_token'
-
-// ─── Auth token management ───────────────────────────────────────────────────
-
-export function getAuthToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function setAuthToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export function clearAuthToken() {
-  localStorage.removeItem(TOKEN_KEY)
-}
 
 // ─── HTTP client ─────────────────────────────────────────────────────────────
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = getAuthToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
 
   const res = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include',
@@ -36,6 +17,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error ?? `HTTP ${res.status}`)
   }
+  // 204 No Content — no body to parse
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -169,14 +152,9 @@ async function uploadFile(file: File): Promise<UploadResponse> {
   const form = new FormData()
   form.append('file', file)
 
-  const headers: Record<string, string> = {}
-  const token = getAuthToken()
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
   const res = await fetch(`${BASE_URL}/upload`, {
     method: 'POST',
     credentials: 'include',
-    headers,
     body: form,
   })
   if (!res.ok) {
@@ -187,9 +165,28 @@ async function uploadFile(file: File): Promise<UploadResponse> {
   return res.json()
 }
 
+// ─── Auth API ─────────────────────────────────────────────────────────────────
+
+const authApi = {
+  /** POST /api/auth/login — submits token, receives HttpOnly cookie on 204 */
+  login: (token: string): Promise<void> =>
+    request<void>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  /** POST /api/auth/logout — rotates token, clears cookie */
+  logout: (): Promise<void> =>
+    request<void>('/auth/logout', {
+      method: 'POST',
+    }),
+}
+
 // ─── API functions ────────────────────────────────────────────────────────────
 
 const _realApi = {
+  auth: authApi,
+
   status: () => request<AgentStatus>('/status'),
 
   metrics: () => request<MetricsSnapshot>('/metrics'),
@@ -233,7 +230,6 @@ const _realApi = {
   deleteMedia: (sha256: string) => fetch(`${BASE_URL}/media/${sha256}`, {
     method: 'DELETE',
     credentials: 'include',
-    headers: { Authorization: `Bearer ${getAuthToken() ?? ''}` },
   }).then(res => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
   }),
@@ -250,12 +246,8 @@ export function createWebSocket(path: string): WebSocket {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   // Browser sends HttpOnly cookies automatically on WebSocket handshake.
-  // Fall back to query param token for backwards compatibility.
-  const token = getAuthToken()
-  const url = token
-    ? `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`
-    : `${protocol}//${host}${path}`
-  return new WebSocket(url)
+  // No ?token= query param — cookie-only auth (FR-41, INV-7).
+  return new WebSocket(`${protocol}//${host}${path}`)
 }
 
 // ─── Conditional mock swap (tree-shaken in production) ────────────────────────

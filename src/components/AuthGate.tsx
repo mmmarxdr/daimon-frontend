@@ -1,5 +1,8 @@
-import { useState, useEffect, type ReactNode } from 'react'
-import { setAuthToken, api, AuthError } from '../api/client'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { api, AuthError } from '../api/client'
+import { emitLogout, onLogout } from '../lib/auth-events'
+import { AuthContext } from '../contexts/AuthContext'
 import { KeyRound } from 'lucide-react'
 
 interface AuthGateProps {
@@ -10,11 +13,11 @@ export function AuthGate({ children }: AuthGateProps) {
   const [authed, setAuthed] = useState<boolean | null>(null) // null = checking
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
+  const queryClient = useQueryClient()
 
   // On mount, verify auth by calling the API.
-  // Auth may come from an HttpOnly cookie (set by setup wizard) or
-  // a localStorage token (legacy / manual entry). Either way, the
-  // server validates — we just need to make the call.
+  // Auth comes from an HttpOnly cookie set by the server.
+  // The token is NEVER stored in localStorage or any JS-accessible store (INV-4).
   useEffect(() => {
     api.status()
       .then(() => setAuthed(true))
@@ -28,22 +31,47 @@ export function AuthGate({ children }: AuthGateProps) {
       })
   }, [])
 
+  // Mount BroadcastChannel listener ONCE at app-init level (FR-43, AS-13).
+  // On receiving 'logged_out', clear cache and show AuthGate — no network round-trip.
+  useEffect(() => {
+    const cleanup = onLogout(() => {
+      queryClient.clear()
+      setAuthed(false)
+    })
+    return cleanup
+  }, [queryClient])
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await api.auth.logout()
+    } catch {
+      // If logout fails (e.g. network), still clear local state
+    }
+    emitLogout()          // notify other tabs (FR-42)
+    queryClient.clear()
+    setAuthed(false)
+  }, [queryClient])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = token.trim()
     if (!trimmed) return
 
-    setAuthToken(trimmed)
     try {
+      // POST /api/auth/login — server sets HttpOnly cookie on 204 (FR-37)
+      await api.auth.login(trimmed)
+      // Token MUST NOT be retained or written anywhere (FR-38, INV-4)
+      setToken('')
+      setError('')
+      // Re-check auth status to confirm cookie is valid
       await api.status()
       setAuthed(true)
-      setError('')
     } catch (err) {
       if (err instanceof AuthError) {
         setError('Invalid token')
-        setAuthToken('') // clear bad token
+        setToken('')
       } else {
-        // Server might be down — save token anyway.
+        // Server might be down — let through anyway.
         setAuthed(true)
       }
     }
@@ -58,8 +86,14 @@ export function AuthGate({ children }: AuthGateProps) {
     )
   }
 
-  // Authenticated — render app.
-  if (authed) return <>{children}</>
+  // Authenticated — render app with auth context so Sidebar can log out.
+  if (authed) {
+    return (
+      <AuthContext.Provider value={{ logout: handleLogout }}>
+        {children}
+      </AuthContext.Provider>
+    )
+  }
 
   // Token prompt.
   return (

@@ -11,9 +11,6 @@ vi.mock('../../api/client', () => ({
     models: vi.fn(),
     updateConfig: vi.fn(),
   },
-  getAuthToken: vi.fn(() => 'test-token'),
-  setAuthToken: vi.fn(),
-  clearAuthToken: vi.fn(),
 }))
 
 // Mock setupApi

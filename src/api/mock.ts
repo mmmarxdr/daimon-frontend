@@ -221,6 +221,13 @@ export const mockApi = {
     { name: 'list_files', description: 'List files in a directory', schema: { type: 'object', properties: { path: { type: 'string' } } } },
     { name: 'http_fetch', description: 'Fetch content from a URL', schema: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string' } }, required: ['url'] } },
   ]),
+
+  // Auth namespace — mock dev mode always succeeds
+  auth: {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    login: (_token: string): Promise<void> => delay(undefined as void),
+    logout: (): Promise<void> => delay(undefined as void),
+  },
 }
 
 // ─── Task 2.4–2.9: MockWebSocket class ───────────────────────────────────────

@@ -12,8 +12,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  LogOut,
 } from 'lucide-react'
 import { useSidebar } from '../../contexts/SidebarContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
 
 const navItems = [
@@ -35,6 +37,7 @@ interface SidebarProps {
 
 export function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
   const { collapsed, toggle } = useSidebar()
+  const { logout } = useAuth()
 
   return (
     <aside
@@ -105,7 +108,7 @@ export function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Footer: collapse toggle */}
+      {/* Footer: collapse toggle + logout */}
       <div className={cn(
         'shrink-0 border-t border-border p-2 flex',
         collapsed && !drawerOpen ? 'flex-col items-center gap-1' : 'items-center gap-1'
@@ -123,6 +126,22 @@ export function Sidebar({ drawerOpen = false, onClose }: SidebarProps) {
             }
           </button>
         )}
+
+        {/* Logout button */}
+        <button
+          onClick={logout}
+          aria-label="Log out"
+          title={collapsed && !drawerOpen ? 'Log out' : undefined}
+          className={cn(
+            'flex items-center justify-center h-9 rounded-md text-text-secondary hover:bg-hover-surface hover:text-red-400 transition-colors',
+            collapsed && !drawerOpen ? 'w-9' : 'gap-3 px-3 w-full',
+          )}
+        >
+          <LogOut size={16} strokeWidth={1.75} />
+          {!(collapsed && !drawerOpen) && (
+            <span className="text-[14px] font-medium">Log out</span>
+          )}
+        </button>
       </div>
     </aside>
   )
