@@ -10,6 +10,7 @@ import { LiminalReasoning } from '../components/liminal/LiminalReasoning'
 import { LiminalGlyph } from '../components/liminal/LiminalGlyph'
 import { LiminalSpeaker } from '../components/liminal/LiminalSpeaker'
 import { groupTurns } from '../lib/turnGrouping'
+import { uuid } from '../lib/uuid'
 import { api } from '../api/client'
 import type { Attachment, ChatMessage, MediaMeta, TurnStatus } from '../types/chat'
 
@@ -460,7 +461,7 @@ export function ChatPage() {
           return [
             ...prev,
             bakeReasoningIfFirst({
-              id: crypto.randomUUID(),
+              id: uuid(),
               role: 'tool',
               content: '',
               timestamp: new Date(),
@@ -578,7 +579,7 @@ export function ChatPage() {
           return [
             ...prev,
             bakeReasoningIfFirst({
-              id: crypto.randomUUID(),
+              id: uuid(),
               role: 'assistant',
               content: msg.text ?? '',
               timestamp: new Date(),
@@ -593,7 +594,7 @@ export function ChatPage() {
         setMessages((prev) => [
           ...prev,
           bakeReasoningIfFirst({
-            id: crypto.randomUUID(),
+            id: uuid(),
             role: 'assistant',
             content: msg.text ?? '',
             timestamp: new Date(),
@@ -674,7 +675,7 @@ export function ChatPage() {
     setMessages((prev) => [
       ...prev,
       {
-        id: crypto.randomUUID(),
+        id: uuid(),
         role: 'user',
         content: text || (attachments ? `[${attachments.map((a) => a.filename).join(', ')}]` : ''),
         timestamp: new Date(),

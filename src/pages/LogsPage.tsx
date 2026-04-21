@@ -4,6 +4,7 @@ import { useWebSocket, type WsStatus } from '../hooks/useWebSocket'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { cn } from '../lib/utils'
+import { uuid } from '../lib/uuid'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export function LogsPage() {
     const { time, level, msg, ...rest } = raw
 
     const entry: LogEntry = {
-      id:   crypto.randomUUID(),
+      id:   uuid(),
       time: time as string,
       level: (level as string).toUpperCase() as LogLevel,
       msg:  msg as string,
