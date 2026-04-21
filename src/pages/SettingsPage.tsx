@@ -19,14 +19,22 @@ import { DangerZoneModal } from '../components/DangerZoneModal'
 import { setupApi } from '../api/setup'
 import { useSetup } from '../contexts/SetupContext'
 import { cn } from '../lib/utils'
+import {
+  EMBEDDING_PROVIDERS,
+  EMBEDDING_PROVIDER_BY_ID,
+  EMBEDDING_INTRO_COPY,
+  EMBEDDING_MODEL_CHANGE_WARNING,
+  type EmbeddingProviderId,
+} from '../design/embeddingCatalog'
 
-type Tab = 'agent' | 'provider' | 'channel' | 'tools' | 'web'
+type Tab = 'agent' | 'provider' | 'channel' | 'tools' | 'memory' | 'web'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'agent',    label: 'Agent' },
   { id: 'provider', label: 'Provider' },
   { id: 'channel',  label: 'Channel' },
   { id: 'tools',    label: 'Tools' },
+  { id: 'memory',   label: 'Memory' },
   { id: 'web',      label: 'Web' },
 ]
 
@@ -452,6 +460,16 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* ── Memory ── */}
+        <div className={cn(activeTab !== 'memory' && 'hidden')}>
+          <MemoryEmbeddingsPanel
+            control={control}
+            register={register}
+            watch={watch}
+            savedConfig={configData as ConfigFormData | undefined}
+          />
+        </div>
+
         {/* ── Web ── */}
         <div className={cn(activeTab !== 'web' && 'hidden')}>
           <div className="space-y-5">
@@ -558,4 +576,212 @@ export function SettingsPage() {
       />
     </div>
   )
+}
+
+// ─── Memory / Embeddings panel ──────────────────────────────────────────────
+
+import type { Control, UseFormRegister, UseFormWatch } from 'react-hook-form'
+
+interface MemoryEmbeddingsPanelProps {
+  control: Control<ConfigFormData>
+  register: UseFormRegister<ConfigFormData>
+  watch: UseFormWatch<ConfigFormData>
+  savedConfig: ConfigFormData | undefined
+}
+
+function MemoryEmbeddingsPanel({ control, register, watch, savedConfig }: MemoryEmbeddingsPanelProps) {
+  const [infoOpen, setInfoOpen] = useState(false)
+  const enabled = watch('rag.embedding.enabled') ?? false
+  const provider = watch('rag.embedding.provider') ?? ''
+  const model = watch('rag.embedding.model') ?? ''
+
+  const providerEntry = isEmbeddingProvider(provider)
+    ? EMBEDDING_PROVIDER_BY_ID[provider]
+    : undefined
+
+  const savedProvider = savedConfig?.rag?.embedding?.provider ?? ''
+  const savedModel = savedConfig?.rag?.embedding?.model ?? ''
+  const savedEnabled = savedConfig?.rag?.embedding?.enabled ?? false
+  // Show the invalidation warning only when the user already had embeddings
+  // running with a different provider/model combination — first-time setup
+  // doesn't need the doomsday tone.
+  const showChangeWarning =
+    savedEnabled &&
+    enabled &&
+    (provider !== savedProvider || (model !== '' && model !== savedModel))
+
+  return (
+    <div className="space-y-6">
+      <div className="border border-border rounded-md p-5 space-y-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-text-primary">Embeddings</h3>
+              <button
+                type="button"
+                onClick={() => setInfoOpen((v) => !v)}
+                aria-label="What are embeddings?"
+                className="cursor-pointer w-5 h-5 rounded-full text-xs font-serif italic flex items-center justify-center"
+                style={{
+                  border: '1px solid var(--line)',
+                  color: 'var(--ink-muted)',
+                  background: infoOpen ? 'var(--bg-deep)' : 'transparent',
+                }}
+              >
+                i
+              </button>
+            </div>
+            <p className="text-xs text-text-secondary mt-1 font-serif italic">
+              Let me search by meaning, not just keywords.
+            </p>
+          </div>
+          <Controller
+            name="rag.embedding.enabled"
+            control={control}
+            render={({ field }) => (
+              <Toggle checked={field.value ?? false} onChange={field.onChange} />
+            )}
+          />
+        </div>
+
+        {infoOpen && (
+          <div
+            className="font-serif italic text-sm whitespace-pre-line"
+            style={{
+              padding: '12px 14px',
+              borderLeft: '2px solid var(--accent)',
+              background: 'var(--bg-deep)',
+              color: 'var(--ink-soft)',
+              lineHeight: 1.55,
+            }}
+          >
+            {EMBEDDING_INTRO_COPY}
+          </div>
+        )}
+
+        {enabled && (
+          <div className="space-y-4 pt-2 border-t border-border">
+            <FormField label="Provider">
+              <Controller
+                name="rag.embedding.provider"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? ''}
+                    onChange={(e) => {
+                      field.onChange(e.target.value)
+                    }}
+                  >
+                    <option value="">Choose a provider…</option>
+                    {EMBEDDING_PROVIDERS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              />
+              {providerEntry && (
+                <p className="text-xs text-text-secondary mt-2 font-serif italic" style={{ lineHeight: 1.5 }}>
+                  {providerEntry.intro}{' '}
+                  <a
+                    href={providerEntry.apiKeyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+                  >
+                    Get an API key
+                  </a>
+                  .
+                </p>
+              )}
+            </FormField>
+
+            {providerEntry && (
+              <>
+                <FormField label="Model">
+                  <Controller
+                    name="rag.embedding.model"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ?? ''}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      >
+                        <option value="">Provider default ({providerEntry.models.find((m) => m.recommended)?.id ?? ''})</option>
+                        {providerEntry.models.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label} — {m.pricing}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  />
+                  <ModelDetails providerId={providerEntry.id} modelId={model} />
+                </FormField>
+
+                <FormField label="API key">
+                  <Input
+                    type="password"
+                    {...register('rag.embedding.api_key')}
+                    placeholder="sk-... or AIza..."
+                    autoComplete="off"
+                  />
+                </FormField>
+
+                <FormField
+                  label="Custom base URL"
+                  hint="Leave empty for the provider's standard endpoint."
+                >
+                  <Input {...register('rag.embedding.base_url')} placeholder="" />
+                </FormField>
+
+                {showChangeWarning && (
+                  <div
+                    className="font-serif italic text-sm"
+                    style={{
+                      padding: '12px 14px',
+                      borderLeft: '2px solid var(--amber)',
+                      background: 'color-mix(in srgb, var(--amber) 6%, transparent)',
+                      color: 'var(--ink-soft)',
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    {EMBEDDING_MODEL_CHANGE_WARNING}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {!enabled && (
+          <p className="text-xs text-text-secondary font-serif italic">
+            Disabled — search uses keyword matching (BM25) only. Turn this on to add semantic search.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface ModelDetailsProps {
+  providerId: EmbeddingProviderId
+  modelId: string
+}
+
+function ModelDetails({ providerId, modelId }: ModelDetailsProps) {
+  if (!modelId) return null
+  const entry = EMBEDDING_PROVIDER_BY_ID[providerId]
+  const m = entry.models.find((x) => x.id === modelId)
+  if (!m?.note) return null
+  return (
+    <p className="text-xs text-text-secondary mt-2 font-serif italic" style={{ lineHeight: 1.5 }}>
+      {m.note} · {m.dimensions}-dim vectors
+    </p>
+  )
+}
+
+function isEmbeddingProvider(s: string): s is EmbeddingProviderId {
+  return s === 'openai' || s === 'gemini'
 }

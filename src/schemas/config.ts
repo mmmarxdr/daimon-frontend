@@ -91,6 +91,16 @@ export const configSchema = z.object({
     max_results_per_job: z.number().int().optional(),
     max_concurrent: z.number().int().optional(),
   }).optional(),
+  rag: z.object({
+    enabled: z.boolean().optional(),
+    embedding: z.object({
+      enabled: z.boolean().default(false),
+      provider: z.string().default(''), // 'openai' | 'gemini' | ''
+      model: z.string().default(''),
+      api_key: z.string().default(''),
+      base_url: z.string().default(''),
+    }).optional(),
+  }).optional(),
 })
 
 export type ConfigFormData = z.infer<typeof configSchema>
@@ -113,4 +123,8 @@ export const DEFAULT_CONFIG: ConfigFormData = {
   },
   limits: { tool_timeout: 30_000_000_000, total_timeout: 300_000_000_000 },
   web: { enabled: true, port: 8080, host: '0.0.0.0', auth_token: '' },
+  rag: {
+    enabled: false,
+    embedding: { enabled: false, provider: '', model: '', api_key: '', base_url: '' },
+  },
 }
