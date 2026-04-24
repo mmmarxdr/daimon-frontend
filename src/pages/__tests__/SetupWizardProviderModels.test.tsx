@@ -71,8 +71,8 @@ describe('SetupWizardPage.modelPicker.PMD-5a', () => {
     renderWizard()
 
     // Step 0: Welcome
-    await waitFor(() => screen.getByText(/get started/i))
-    fireEvent.click(screen.getByText(/get started/i))
+    await waitFor(() => screen.getByText(/begin/i))
+    fireEvent.click(screen.getByText(/begin/i))
 
     // Step 1: Provider selection — choose anthropic
     await waitFor(() => screen.getByText(/anthropic/i))
@@ -102,8 +102,8 @@ describe('SetupWizardPage.modelPicker.PMD-5a', () => {
 
     renderWizard()
 
-    await waitFor(() => screen.getByText(/get started/i))
-    fireEvent.click(screen.getByText(/get started/i))
+    await waitFor(() => screen.getByText(/begin/i))
+    fireEvent.click(screen.getByText(/begin/i))
 
     await waitFor(() => screen.getByText(/anthropic/i))
     fireEvent.click(screen.getAllByText(/anthropic/i)[0])

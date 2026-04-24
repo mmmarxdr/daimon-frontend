@@ -1,35 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type CSSProperties } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  CheckCircle2,
-  Eye,
-  EyeOff,
-  Loader2,
-  Zap,
-} from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { setupApi, type ProviderInfo } from '../api/setup'
 import { getProviderModels, type ModelInfo } from '../api/client'
 import { ModelPicker } from '../components/provider/ModelPicker'
 import { useSetup } from '../contexts/SetupContext'
+import { LiminalGlyph } from '../components/liminal/LiminalGlyph'
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-const STEPS = ['Welcome', 'Provider', 'Credentials', 'Done']
+const STEPS = ['welcome', 'provider', 'credentials', 'done']
 
 function StepIndicator({ current }: { current: number }) {
   return (
-    <div className="flex items-center justify-center gap-2 mb-8">
+    <div className="flex items-center justify-center" style={{ gap: 6, marginBottom: 28 }}>
       {STEPS.map((_, i) => (
         <div
           key={i}
-          className="h-1 w-8 rounded-full transition-all duration-200"
           style={{
+            height: 2,
+            width: i === current ? 28 : 18,
+            borderRadius: 1,
             background:
               i < current
-                ? 'rgba(16,185,129,0.5)'
+                ? 'color-mix(in srgb, var(--accent) 55%, transparent)'
                 : i === current
-                ? '#10b981'
-                : '#222222',
+                  ? 'var(--accent)'
+                  : 'var(--line-strong)',
+            transition: 'all 0.2s ease',
           }}
         />
       ))}
@@ -37,66 +35,152 @@ function StepIndicator({ current }: { current: number }) {
   )
 }
 
+// ─── Reusable styled primitives ──────────────────────────────────────────────
+
+const sectionTitleStyle: CSSProperties = {
+  fontSize: 22,
+  lineHeight: 1.25,
+  letterSpacing: -0.4,
+  color: 'var(--ink)',
+  margin: 0,
+  marginBottom: 6,
+}
+
+const sectionSubStyle: CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.55,
+  color: 'var(--ink-muted)',
+  marginBottom: 22,
+}
+
+const labelStyle: CSSProperties = {
+  display: 'block',
+  fontSize: 10.5,
+  letterSpacing: 0.7,
+  color: 'var(--ink-muted)',
+  marginBottom: 6,
+  textTransform: 'uppercase',
+}
+
+const inputStyle: CSSProperties = {
+  width: '100%',
+  background: 'var(--bg-deep)',
+  border: '1px solid var(--line)',
+  borderRadius: 6,
+  padding: '9px 12px',
+  fontSize: 13,
+  color: 'var(--ink)',
+  outline: 'none',
+}
+
+function primaryBtnStyle(disabled: boolean): CSSProperties {
+  return {
+    background: 'var(--accent)',
+    color: 'var(--bg-elev)',
+    border: 'none',
+    borderRadius: 6,
+    padding: '9px 18px',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.4 : 1,
+    transition: 'opacity 0.15s',
+  }
+}
+
+function ghostBtnStyle(): CSSProperties {
+  return {
+    background: 'transparent',
+    color: 'var(--ink-soft)',
+    border: '1px solid var(--line)',
+    borderRadius: 6,
+    padding: '9px 18px',
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: 'pointer',
+  }
+}
+
 // ─── Step 1: Welcome ──────────────────────────────────────────────────────────
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
-    <div className="text-center">
-      <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-[#111111] border border-[#222222] mb-5">
-        <Zap className="w-6 h-6 text-accent" />
-      </div>
-      <h1 className="text-xl font-semibold text-text-primary mb-2">Welcome to Microclaw</h1>
-      <p className="text-sm text-text-secondary mb-8 max-w-xs mx-auto">
-        Let's get your AI agent configured. This takes about 2 minutes.
+    <div className="flex flex-col" style={{ gap: 0 }}>
+      <h2 className="font-serif italic" style={sectionTitleStyle}>
+        let's bring me into being.
+      </h2>
+      <p className="font-serif italic" style={sectionSubStyle}>
+        three steps. two minutes. then we can speak.
       </p>
-      <div className="bg-surface border border-border rounded-md p-5 text-left space-y-3 mb-8">
-        <div className="flex items-start gap-3">
-          <div className="w-5 h-5 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 mt-0.5">
-            <span className="text-accent text-xs font-bold">1</span>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-text-primary">Choose a provider</p>
-            <p className="text-xs text-text-secondary mt-0.5">Anthropic, OpenAI, Gemini, or local Ollama</p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="w-5 h-5 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 mt-0.5">
-            <span className="text-accent text-xs font-bold">2</span>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-text-primary">Enter your API key</p>
-            <p className="text-xs text-text-secondary mt-0.5">We validate it before saving</p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="w-5 h-5 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 mt-0.5">
-            <span className="text-accent text-xs font-bold">3</span>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-text-primary">Start using the dashboard</p>
-            <p className="text-xs text-text-secondary mt-0.5">Conversations, memory, tools — all ready</p>
-          </div>
+
+      <div
+        className="font-sans"
+        style={{
+          background: 'var(--bg-deep)',
+          border: '1px solid var(--line)',
+          borderRadius: 6,
+          padding: '18px 20px',
+          marginBottom: 26,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        <WelcomeRow
+          n="01"
+          title="pick a provider"
+          hint="Anthropic, OpenAI, Gemini, OpenRouter, or a local Ollama"
+        />
+        <WelcomeRow
+          n="02"
+          title="hand me an API key"
+          hint="I check it against the provider before I save anything"
+        />
+        <WelcomeRow
+          n="03"
+          title="and that's it"
+          hint="conversations, memory, tools — all yours from there"
+        />
+      </div>
+
+      <div className="flex justify-end">
+        <button type="button" onClick={onNext} style={primaryBtnStyle(false)}>
+          begin →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WelcomeRow({ n, title, hint }: { n: string; title: string; hint: string }) {
+  return (
+    <div className="flex items-start" style={{ gap: 14 }}>
+      <span
+        className="font-mono"
+        style={{
+          fontSize: 11,
+          color: 'var(--accent)',
+          letterSpacing: 0.5,
+          paddingTop: 2,
+          minWidth: 18,
+        }}
+      >
+        {n}
+      </span>
+      <div>
+        <div style={{ fontSize: 13.5, color: 'var(--ink)', fontWeight: 500 }}>{title}</div>
+        <div
+          className="font-serif italic"
+          style={{ fontSize: 12.5, color: 'var(--ink-muted)', marginTop: 2 }}
+        >
+          {hint}
         </div>
       </div>
-      <button
-        onClick={onNext}
-        className="w-full py-2.5 bg-accent text-white text-sm font-medium rounded-md hover:bg-accent-hover transition-colors"
-      >
-        Get Started
-      </button>
     </div>
   )
 }
 
 // ─── Step 2: Provider ─────────────────────────────────────────────────────────
-
-const PROVIDER_ICONS: Record<string, string> = {
-  anthropic: '🟠',
-  openai: '🟢',
-  gemini: '🔵',
-  openrouter: '🟣',
-  ollama: '⚫',
-}
 
 interface ProviderStepProps {
   selected: string | null
@@ -125,62 +209,112 @@ function ProviderStep({ selected, onSelect, onNext, onBack }: ProviderStepProps)
 
   return (
     <div>
-      <p className="text-sm font-semibold text-text-primary mb-1">Choose a provider</p>
-      <p className="text-xs text-text-secondary mb-5">Select the AI provider you want to use.</p>
+      <h2 className="font-serif italic" style={sectionTitleStyle}>
+        choose a voice.
+      </h2>
+      <p className="font-serif italic" style={sectionSubStyle}>
+        every provider speaks with a different timbre. you can change it later.
+      </p>
 
       {loading && (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 className="w-5 h-5 text-text-secondary animate-spin" />
+        <div className="flex items-center justify-center" style={{ padding: '40px 0' }}>
+          <Loader2 size={18} className="animate-spin" style={{ color: 'var(--ink-muted)' }} />
         </div>
       )}
 
       {error && (
-        <div className="text-xs text-error bg-error/10 border border-error/20 rounded-md px-3 py-2 mb-4">
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--red)',
+            background: 'color-mix(in srgb, var(--red) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--red) 25%, transparent)',
+            borderRadius: 6,
+            padding: '8px 12px',
+            marginBottom: 16,
+          }}
+        >
           {error}
         </div>
       )}
 
       {!loading && !error && (
-        <div className="grid grid-cols-2 gap-2 mb-5">
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 24 }}
+        >
           {Object.entries(providers).map(([id, info]) => (
-            <button
+            <ProviderCard
               key={id}
-              onClick={() => onSelect(id)}
-              className={[
-                'text-left rounded-md px-3 py-3 border transition-all duration-150',
-                selected === id
-                  ? 'border-accent bg-accent/10'
-                  : 'border-border bg-transparent hover:border-border-strong hover:bg-hover-surface',
-              ].join(' ')}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-base">{PROVIDER_ICONS[id] ?? '⚙️'}</span>
-                <span className="text-sm font-medium text-text-primary">{info.display_name}</span>
-              </div>
-              <p className="text-xs text-text-secondary">
-                {info.requires_api_key ? 'API key required' : 'No API key needed'}
-              </p>
-            </button>
+              id={id}
+              info={info}
+              selected={selected === id}
+              onSelect={onSelect}
+            />
           ))}
         </div>
       )}
 
-      <div className="flex justify-between mt-6">
-        <button
-          onClick={onBack}
-          className="px-4 py-2 text-sm font-medium text-text-secondary border border-border rounded-md hover:bg-hover-surface transition-colors"
-        >
-          Back
+      <div className="flex justify-between">
+        <button type="button" onClick={onBack} style={ghostBtnStyle()}>
+          ← back
         </button>
         <button
+          type="button"
           onClick={onNext}
           disabled={!selected}
-          className="px-4 py-2 text-sm font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={primaryBtnStyle(!selected)}
         >
-          Continue
+          continue →
         </button>
       </div>
     </div>
+  )
+}
+
+function ProviderCard({
+  id,
+  info,
+  selected,
+  onSelect,
+}: {
+  id: string
+  info: ProviderInfo
+  selected: boolean
+  onSelect: (id: string) => void
+}) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(id)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        textAlign: 'left',
+        background: selected ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'var(--bg-deep)',
+        border: `1px solid ${selected ? 'var(--accent)' : hover ? 'var(--line-strong)' : 'var(--line)'}`,
+        borderRadius: 6,
+        padding: '12px 14px',
+        cursor: 'pointer',
+        transition: 'border-color 0.15s, background 0.15s',
+      }}
+    >
+      <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>
+        {info.display_name}
+      </div>
+      <div
+        className="font-mono"
+        style={{
+          fontSize: 10.5,
+          color: 'var(--ink-muted)',
+          marginTop: 4,
+          letterSpacing: 0.3,
+        }}
+      >
+        {info.requires_api_key ? 'api key' : 'no key needed'}
+      </div>
+    </button>
   )
 }
 
@@ -208,8 +342,7 @@ const OTHER_SENTINEL = '__other__'
 
 function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: CredentialsStepProps) {
   const isOllama = providerId === 'ollama'
-  // Catalog models from /api/setup/providers (static fallback)
-  const catalogModels: ModelInfo[] = (providerInfo?.models ?? []).map(m => ({
+  const catalogModels: ModelInfo[] = (providerInfo?.models ?? []).map((m) => ({
     id: m.id,
     name: m.display_name,
     context_length: m.context_k * 1000,
@@ -229,23 +362,24 @@ function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: Crede
     skipped: false,
   })
 
-  // Dynamic models fetched after validate-key succeeds
   const [dynamicModels, setDynamicModels] = useState<ModelInfo[] | null>(null)
   const [dynamicModelsLoading, setDynamicModelsLoading] = useState(false)
   const [dynamicModelsError, setDynamicModelsError] = useState<Error | null>(null)
 
-  // For Ollama / pre-validation: use classic text input
-  const [modelDropdown, setModelDropdown] = useState(catalogModels[0]?.id ?? (isOllama ? '' : OTHER_SENTINEL))
+  const [modelDropdown, setModelDropdown] = useState(
+    catalogModels[0]?.id ?? (isOllama ? '' : OTHER_SENTINEL),
+  )
   const [customModel, setCustomModel] = useState('')
 
   const effectiveModel = dynamicModels
-    ? state.model  // controlled by ModelPicker
-    : (modelDropdown === OTHER_SENTINEL || isOllama ? customModel : modelDropdown)
+    ? state.model
+    : modelDropdown === OTHER_SENTINEL || isOllama
+      ? customModel
+      : modelDropdown
 
   const canContinue = state.validationStatus === 'success' || state.skipped
 
-  const update = (patch: Partial<CredentialsState>) =>
-    setState((s) => ({ ...s, ...patch }))
+  const update = (patch: Partial<CredentialsState>) => setState((s) => ({ ...s, ...patch }))
 
   const handleValidate = async () => {
     update({ validating: true, validationStatus: 'idle', validationError: '' })
@@ -258,26 +392,27 @@ function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: Crede
       })
       if (res.valid) {
         update({ validating: false, validationStatus: 'success' })
-        // Fetch dynamic models post-validation
         if (!isOllama) {
           setDynamicModelsLoading(true)
           setDynamicModelsError(null)
           try {
             const result = await getProviderModels(providerId)
             setDynamicModels(result.models)
-            // Pre-select first dynamic model if none selected
             if (result.models.length > 0 && !state.model) {
               update({ model: result.models[0].id })
             }
           } catch (err) {
             setDynamicModelsError(err instanceof Error ? err : new Error('Failed to load models'))
-            // Fall back to catalog — dynamicModels stays null
           } finally {
             setDynamicModelsLoading(false)
           }
         }
       } else {
-        update({ validating: false, validationStatus: 'error', validationError: res.error ?? 'Validation failed' })
+        update({
+          validating: false,
+          validationStatus: 'error',
+          validationError: res.error ?? 'Validation failed',
+        })
       }
     } catch (err) {
       update({
@@ -294,31 +429,45 @@ function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: Crede
 
   return (
     <div>
-      <p className="text-sm font-semibold text-text-primary mb-1">Configure credentials</p>
-      <p className="text-xs text-text-secondary mb-5">
-        {isOllama ? 'Set your Ollama base URL and model.' : 'Enter your API key and select a model.'}
+      <h2 className="font-serif italic" style={sectionTitleStyle}>
+        your keys.
+      </h2>
+      <p className="font-serif italic" style={sectionSubStyle}>
+        {isOllama
+          ? 'point me at your local Ollama. nothing leaves your machine.'
+          : "I'll check it before I save anything."}
       </p>
 
-      <div className="space-y-4">
-        {/* API key — hidden for Ollama */}
+      <div className="flex flex-col" style={{ gap: 16 }}>
         {!isOllama && (
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              API Key
+            <label className="font-mono" style={labelStyle}>
+              API KEY
             </label>
-            <div className="relative">
+            <div style={{ position: 'relative' }}>
               <input
                 type={state.showKey ? 'text' : 'password'}
                 value={state.apiKey}
                 onChange={(e) => update({ apiKey: e.target.value, validationStatus: 'idle' })}
                 placeholder="sk-ant-api..."
-                className="w-full bg-transparent border border-border rounded-md px-3 py-2.5 pr-10 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-border-strong"
+                className="font-mono"
+                style={{ ...inputStyle, paddingRight: 36 }}
               />
               <button
                 type="button"
                 onClick={() => update({ showKey: !state.showKey })}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
                 tabIndex={-1}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--ink-muted)',
+                  padding: 4,
+                }}
               >
                 {state.showKey ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
@@ -326,26 +475,25 @@ function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: Crede
           </div>
         )}
 
-        {/* Base URL — shown for Ollama */}
         {isOllama && (
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Base URL
+            <label className="font-mono" style={labelStyle}>
+              BASE URL
             </label>
             <input
               type="text"
               value={state.baseUrl}
               onChange={(e) => update({ baseUrl: e.target.value, validationStatus: 'idle' })}
               placeholder="http://localhost:11434"
-              className="w-full bg-transparent border border-border rounded-md px-3 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-border-strong"
+              className="font-mono"
+              style={inputStyle}
             />
           </div>
         )}
 
-        {/* Model selection */}
         <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1.5">
-            Model
+          <label className="font-mono" style={labelStyle}>
+            MODEL
           </label>
           {isOllama ? (
             <input
@@ -353,10 +501,10 @@ function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: Crede
               value={customModel}
               onChange={(e) => setCustomModel(e.target.value)}
               placeholder="llama3, mistral, codestral..."
-              className="w-full bg-transparent border border-border rounded-md px-3 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-border-strong"
+              className="font-mono"
+              style={inputStyle}
             />
           ) : dynamicModels !== null ? (
-            // Post-validation: dynamic ModelPicker
             <ModelPicker
               value={state.model}
               onChange={(id) => update({ model: id })}
@@ -365,93 +513,136 @@ function CredentialsStep({ providerId, providerInfo, onComplete, onBack }: Crede
               error={dynamicModelsError}
             />
           ) : (
-            <div className="space-y-2">
-              <div className="relative">
-                <select
-                  value={modelDropdown}
-                  onChange={(e) => {
-                    setModelDropdown(e.target.value)
-                    if (e.target.value !== OTHER_SENTINEL) setCustomModel('')
-                  }}
-                  className="w-full appearance-none bg-transparent border border-border rounded-md px-3 py-2.5 pr-8 text-sm text-text-primary focus:outline-none focus:border-border-strong [&>option]:bg-[#111111]"
-                >
-                  {catalogModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                  <option value={OTHER_SENTINEL}>Other...</option>
-                </select>
-              </div>
+            <div className="flex flex-col" style={{ gap: 8 }}>
+              <select
+                value={modelDropdown}
+                onChange={(e) => {
+                  setModelDropdown(e.target.value)
+                  if (e.target.value !== OTHER_SENTINEL) setCustomModel('')
+                }}
+                className="font-mono"
+                style={{
+                  ...inputStyle,
+                  appearance: 'none',
+                  paddingRight: 30,
+                  backgroundImage:
+                    "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%237a7465'%3e%3cpath d='M4 6l4 4 4-4'/%3e%3c/svg%3e\")",
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 8px center',
+                }}
+              >
+                {catalogModels.map((m) => (
+                  <option key={m.id} value={m.id} style={{ background: 'var(--bg-elev)' }}>
+                    {m.name}
+                  </option>
+                ))}
+                <option value={OTHER_SENTINEL} style={{ background: 'var(--bg-elev)' }}>
+                  other…
+                </option>
+              </select>
               {modelDropdown === OTHER_SENTINEL && (
                 <input
                   type="text"
                   value={customModel}
                   onChange={(e) => setCustomModel(e.target.value)}
-                  placeholder="Enter model ID..."
+                  placeholder="model id"
                   autoFocus
-                  className="w-full bg-transparent border border-border rounded-md px-3 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-border-strong"
+                  className="font-mono"
+                  style={inputStyle}
                 />
               )}
             </div>
           )}
         </div>
 
-        {/* Validate button */}
         <button
           type="button"
           onClick={handleValidate}
           disabled={state.validating || (!isOllama && !state.apiKey) || !effectiveModel}
-          className="w-full py-2.5 text-sm font-medium border border-border rounded-md text-text-primary hover:bg-hover-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="font-sans flex items-center justify-center"
+          style={{
+            ...ghostBtnStyle(),
+            width: '100%',
+            padding: '10px 16px',
+            gap: 8,
+            opacity: state.validating || (!isOllama && !state.apiKey) || !effectiveModel ? 0.45 : 1,
+            cursor:
+              state.validating || (!isOllama && !state.apiKey) || !effectiveModel
+                ? 'not-allowed'
+                : 'pointer',
+          }}
         >
           {state.validating ? (
             <>
-              <Loader2 size={14} className="animate-spin" />
-              Validating...
+              <Loader2 size={13} className="animate-spin" />
+              validating…
             </>
           ) : (
-            'Validate'
+            'validate'
           )}
         </button>
 
-        {/* Validation feedback */}
         {state.validationStatus === 'success' && (
-          <div className="flex items-center gap-2 text-xs text-accent bg-accent/10 border border-accent/20 rounded-md px-3 py-2">
+          <div
+            className="flex items-center"
+            style={{
+              gap: 8,
+              fontSize: 12,
+              color: 'var(--accent)',
+              background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+              borderRadius: 6,
+              padding: '8px 12px',
+            }}
+          >
             <CheckCircle2 size={14} />
-            Key validated successfully
+            key validated.
           </div>
         )}
         {state.validationStatus === 'error' && (
-          <div className="text-xs text-error bg-error/10 border border-error/20 rounded-md px-3 py-2">
+          <div
+            style={{
+              fontSize: 12,
+              color: 'var(--red)',
+              background: 'color-mix(in srgb, var(--red) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--red) 25%, transparent)',
+              borderRadius: 6,
+              padding: '8px 12px',
+            }}
+          >
             {state.validationError}
           </div>
         )}
       </div>
 
-      {/* Skip link */}
-      <div className="mt-3 text-center">
+      <div className="text-center" style={{ marginTop: 14 }}>
         <button
           type="button"
           onClick={() => update({ skipped: true, validationStatus: 'idle' })}
-          className="text-xs text-text-disabled hover:text-text-secondary transition-colors"
+          className="font-serif italic"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 11.5,
+            color: 'var(--ink-faint)',
+          }}
         >
-          Skip validation (advanced)
+          skip validation (advanced)
         </button>
       </div>
 
-      <div className="flex justify-between mt-6">
-        <button
-          onClick={onBack}
-          className="px-4 py-2 text-sm font-medium text-text-secondary border border-border rounded-md hover:bg-hover-surface transition-colors"
-        >
-          Back
+      <div className="flex justify-between" style={{ marginTop: 22 }}>
+        <button type="button" onClick={onBack} style={ghostBtnStyle()}>
+          ← back
         </button>
         <button
+          type="button"
           onClick={handleContinue}
           disabled={!canContinue}
-          className="px-4 py-2 text-sm font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={primaryBtnStyle(!canContinue)}
         >
-          Continue
+          continue →
         </button>
       </div>
     </div>
@@ -469,7 +660,7 @@ interface DoneStepProps {
 
 function maskApiKey(key: string): string {
   if (!key || key.length < 8) return key ? '••••••••' : 'none'
-  return `${key.slice(0, 6)}...${key.slice(-4)}`
+  return `${key.slice(0, 6)}…${key.slice(-4)}`
 }
 
 function DoneStep({ providerId, model, apiKey, baseUrl }: DoneStepProps) {
@@ -479,7 +670,6 @@ function DoneStep({ providerId, model, apiKey, baseUrl }: DoneStepProps) {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
-  // Call complete on mount
   useEffect(() => {
     setLoading(true)
     setupApi
@@ -490,8 +680,6 @@ function DoneStep({ providerId, model, apiKey, baseUrl }: DoneStepProps) {
         base_url: baseUrl || undefined,
       })
       .then(() => {
-        // Auth cookie is set automatically by the backend via Set-Cookie (HttpOnly).
-        // No localStorage needed — cookie is sent on all subsequent requests.
         setLoading(false)
         setDone(true)
       })
@@ -524,23 +712,24 @@ function DoneStep({ providerId, model, apiKey, baseUrl }: DoneStepProps) {
 
   if (loading) {
     return (
-      <div className="text-center py-10">
-        <Loader2 className="w-6 h-6 text-text-secondary animate-spin mx-auto mb-3" />
-        <p className="text-sm text-text-secondary">Saving configuration...</p>
+      <div className="text-center" style={{ padding: '40px 0' }}>
+        <Loader2 size={20} className="animate-spin" style={{ color: 'var(--ink-muted)', margin: '0 auto 12px' }} />
+        <p className="font-serif italic" style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
+          saving…
+        </p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="text-center py-6">
-        <p className="text-sm text-error mb-2">Failed to save configuration</p>
-        <p className="text-xs text-text-secondary mb-5">{error}</p>
-        <button
-          onClick={handleRetry}
-          className="px-4 py-2 text-sm font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors"
-        >
-          Try Again
+      <div className="text-center" style={{ padding: '20px 0' }}>
+        <p className="font-serif italic" style={{ fontSize: 14, color: 'var(--red)', marginBottom: 6 }}>
+          something broke.
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 20 }}>{error}</p>
+        <button type="button" onClick={handleRetry} style={primaryBtnStyle(false)}>
+          try again
         </button>
       </div>
     )
@@ -550,42 +739,78 @@ function DoneStep({ providerId, model, apiKey, baseUrl }: DoneStepProps) {
 
   return (
     <div className="text-center">
-      <div className="w-14 h-14 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-4">
-        <CheckCircle2 className="w-6 h-6 text-accent" />
+      <div
+        className="flex items-center justify-center"
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 999,
+          background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+          margin: '0 auto 16px',
+        }}
+      >
+        <CheckCircle2 size={20} style={{ color: 'var(--accent)' }} />
       </div>
-      <h2 className="text-base font-semibold text-text-primary mb-1">You're all set!</h2>
-      <p className="text-xs text-text-secondary mb-5">
-        Your agent is configured and ready to use.
+      <h2 className="font-serif italic" style={{ ...sectionTitleStyle, fontSize: 20, marginBottom: 4 }}>
+        I'm here now.
+      </h2>
+      <p className="font-serif italic" style={{ ...sectionSubStyle, marginBottom: 22 }}>
+        everything saved. we can start talking.
       </p>
 
-      {/* Summary card */}
-      <div className="bg-hover-surface border border-border rounded-md p-4 mb-5 text-left space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-text-secondary">Provider</span>
-          <span className="text-text-primary font-medium capitalize">{providerId}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-text-secondary">Model</span>
-          <span className="text-text-primary font-medium font-mono text-xs">{model}</span>
-        </div>
-        {apiKey && (
-          <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">API Key</span>
-            <span className="text-text-primary font-medium font-mono text-xs">{maskApiKey(apiKey)}</span>
-          </div>
-        )}
+      <div
+        className="font-sans"
+        style={{
+          background: 'var(--bg-deep)',
+          border: '1px solid var(--line)',
+          borderRadius: 6,
+          padding: '14px 16px',
+          marginBottom: 22,
+          textAlign: 'left',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        <SummaryRow label="PROVIDER" value={providerId} />
+        <SummaryRow label="MODEL" value={model} mono />
+        {apiKey && <SummaryRow label="API KEY" value={maskApiKey(apiKey)} mono />}
       </div>
 
       <button
+        type="button"
         onClick={handleGoToDashboard}
-        className="w-full py-2.5 bg-accent text-white text-sm font-medium rounded-md hover:bg-accent-hover transition-colors mb-3"
+        style={{ ...primaryBtnStyle(false), width: '100%', padding: '10px 18px' }}
       >
-        Go to Dashboard
+        enter dashboard
       </button>
 
-      <p className="text-xs text-text-disabled">
-        You can change these settings anytime in Settings.
+      <p
+        className="font-serif italic"
+        style={{ marginTop: 14, fontSize: 11.5, color: 'var(--ink-faint)' }}
+      >
+        change any of this from Settings whenever.
       </p>
+    </div>
+  )
+}
+
+function SummaryRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between" style={{ gap: 12 }}>
+      <span
+        className="font-mono"
+        style={{ fontSize: 10.5, color: 'var(--ink-muted)', letterSpacing: 0.7 }}
+      >
+        {label}
+      </span>
+      <span
+        className={mono ? 'font-mono' : 'font-sans'}
+        style={{ fontSize: 12, color: 'var(--ink)', fontWeight: 500 }}
+      >
+        {value}
+      </span>
     </div>
   )
 }
@@ -610,35 +835,54 @@ export function SetupWizardPage() {
   })
   const [providers, setProviders] = useState<Record<string, ProviderInfo>>({})
 
-  // Pre-fetch providers when wizard loads so ProviderStep + CredentialsStep share the same data
   useEffect(() => {
-    setupApi.providers().then((res) => setProviders(res.providers)).catch(() => {})
+    setupApi
+      .providers()
+      .then((res) => setProviders(res.providers))
+      .catch(() => {})
   }, [])
 
   const goTo = (step: number) => setState((s) => ({ ...s, step }))
 
-  const selectedProviderInfo = state.selectedProvider ? (providers[state.selectedProvider] ?? null) : null
+  const selectedProviderInfo = state.selectedProvider
+    ? (providers[state.selectedProvider] ?? null)
+    : null
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
-      <div className="w-full max-w-[480px]">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-[#111111] border border-[#222222] mb-3">
-            <Zap className="w-5 h-5 text-accent" />
+    <div
+      className="flex items-center justify-center"
+      style={{ minHeight: '100vh', background: 'var(--bg)', padding: 24 }}
+    >
+      <div style={{ width: '100%', maxWidth: 480 }}>
+        <div className="text-center" style={{ marginBottom: 32 }}>
+          <div className="flex items-center justify-center" style={{ marginBottom: 14 }}>
+            <LiminalGlyph size={28} animate />
           </div>
-          <p className="text-xs text-text-secondary uppercase tracking-widest font-medium">
-            Microclaw Setup
+          <p
+            className="font-mono"
+            style={{
+              fontSize: 10.5,
+              color: 'var(--ink-muted)',
+              letterSpacing: 2.5,
+              textTransform: 'uppercase',
+              margin: 0,
+            }}
+          >
+            DAIMON · SETUP
           </p>
         </div>
 
         <StepIndicator current={state.step} />
 
-        {/* Card */}
-        <div className="bg-[#111111] border border-[#222222] rounded-md p-7">
-          {state.step === 0 && (
-            <WelcomeStep onNext={() => goTo(1)} />
-          )}
+        <div
+          style={{
+            background: 'var(--bg-elev)',
+            border: '1px solid var(--line)',
+            borderRadius: 8,
+            padding: '28px 28px 26px',
+          }}
+        >
+          {state.step === 0 && <WelcomeStep onNext={() => goTo(1)} />}
 
           {state.step === 1 && (
             <ProviderStep
@@ -671,8 +915,17 @@ export function SetupWizardPage() {
           )}
         </div>
 
-        <p className="text-center text-xs text-text-disabled mt-5">
-          Step {state.step + 1} of {STEPS.length} — {STEPS[state.step]}
+        <p
+          className="font-mono text-center"
+          style={{
+            marginTop: 18,
+            fontSize: 10.5,
+            color: 'var(--ink-faint)',
+            letterSpacing: 1.2,
+            textTransform: 'uppercase',
+          }}
+        >
+          step {state.step + 1} of {STEPS.length} · {STEPS[state.step]}
         </p>
       </div>
     </div>
