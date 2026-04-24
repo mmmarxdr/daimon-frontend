@@ -1,20 +1,20 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConversation } from '../hooks/useApi'
-import { api } from '../api/client'
-import { Button } from '../components/ui/Button'
-import { ChevronLeft, ChevronDown, ChevronRight, Wrench, Trash2, Download } from 'lucide-react'
-import type { Message } from '../api/client'
+import { useInfiniteConversationMessages } from '../hooks/useInfiniteConversationMessages'
+import { api, type Message } from '../api/client'
 
-function relativeTime(iso: string): string {
+function formatTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const m = Math.floor(diff / 60000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m}m ago`
+  if (m < 1) return 'hace un instante'
+  if (m < 60) return `hace ${m}m`
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
+  if (h < 24) return `hace ${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `hace ${d}d`
+  return new Date(iso).toLocaleDateString()
 }
 
 function downloadFile(content: string, filename: string, mimeType: string) {
@@ -27,72 +27,62 @@ function downloadFile(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url)
 }
 
-function ToolMessage({ message }: { message: Message }) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="w-full my-1">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 text-xs text-text-secondary bg-surface border border-border rounded-md px-3 py-1.5 hover:bg-hover-surface transition-colors w-full text-left"
-      >
-        <Wrench size={12} className="shrink-0 text-text-disabled" />
-        <span className="font-mono flex-1 truncate">tool call</span>
-        {open ? (
-          <ChevronDown size={12} className="shrink-0" />
-        ) : (
-          <ChevronRight size={12} className="shrink-0" />
-        )}
-      </button>
-      {open && (
-        <div className="mt-1 bg-surface border border-border rounded-md p-3 text-xs font-mono text-text-secondary whitespace-pre-wrap break-words overflow-x-auto">
-          {message.content}
-        </div>
-      )}
-      <p className="text-xs text-text-disabled mt-1 px-1 font-mono">{relativeTime(message.timestamp)}</p>
-    </div>
-  )
-}
-
-/** Group consecutive messages by role */
-function groupMessages(messages: Message[]): Array<{ role: Message['role']; messages: Message[] }> {
-  const groups: Array<{ role: Message['role']; messages: Message[] }> = []
-  for (const msg of messages) {
-    const last = groups[groups.length - 1]
-    if (last && last.role === msg.role) {
-      last.messages.push(msg)
-    } else {
-      groups.push({ role: msg.role, messages: [msg] })
-    }
-  }
-  return groups
-}
-
-function SkeletonRow() {
-  return (
-    <div className="border-l-2 border-border py-2 pl-4 mb-3">
-      <div className="h-4 w-3/4 animate-pulse bg-hover-surface rounded mb-2" />
-      <div className="h-3 w-16 animate-pulse bg-hover-surface rounded" />
-    </div>
-  )
-}
-
 export function ConversationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: conversation, isLoading, isError } = useConversation(id ?? '')
+  const qc = useQueryClient()
+  const convID = id ?? ''
 
-  const groups = conversation ? groupMessages(conversation.messages) : []
+  // Summary-ish info (conv metadata). The paginated display uses a
+  // separate infinite query so we only materialise a window at a time.
+  const { data: conversation, isLoading: loadingMeta, isError: errorMeta } =
+    useConversation(convID)
+
+  const {
+    data: messagesData,
+    isLoading: loadingMsgs,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteConversationMessages(convID || null)
+
+  // Flatten newest-first pages into oldest-first for rendering.
+  const messages: Message[] = useMemo(() => {
+    if (!messagesData) return []
+    const out: Message[] = []
+    // Pages arrive newest-first; the first page is the latest window.
+    // We render oldest → newest, so reverse page order and concat each.
+    for (let i = messagesData.pages.length - 1; i >= 0; i--) {
+      out.push(...messagesData.pages[i].messages)
+    }
+    return out
+  }, [messagesData])
+
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+
+  const { mutate: renameConv } = useMutation({
+    mutationFn: (title: string) => api.renameConversation(convID, title),
+    onSuccess: () => {
+      setEditingTitle(false)
+      qc.invalidateQueries({ queryKey: ['conversation', convID] })
+      qc.invalidateQueries({ queryKey: ['conversations'] })
+    },
+  })
 
   const { mutate: deleteConv } = useMutation({
-    mutationFn: () => api.deleteConversation(id ?? ''),
+    mutationFn: () => api.deleteConversation(convID),
     onSuccess: () => navigate('/conversations'),
   })
 
   const handleDelete = () => {
-    if (window.confirm('Delete this conversation? This cannot be undone.')) {
+    if (window.confirm('¿Eliminar esta conversación? Podés restaurarla desde la base de datos dentro de los próximos 30 días.')) {
       deleteConv()
     }
+  }
+
+  const handleResume = () => {
+    navigate(`/chat?conversation_id=${encodeURIComponent(convID)}`)
   }
 
   const handleExportJSON = () => {
@@ -100,14 +90,14 @@ export function ConversationDetailPage() {
     downloadFile(
       JSON.stringify(conversation, null, 2),
       `conversation-${conversation.id}.json`,
-      'application/json'
+      'application/json',
     )
   }
 
   const handleExportMarkdown = () => {
     if (!conversation) return
     const lines: string[] = [
-      `# Conversation ${conversation.id}`,
+      `# ${displayTitle(conversation.id)}`,
       `**Channel:** ${conversation.channel_id}`,
       `**Created:** ${new Date(conversation.created_at).toLocaleString()}`,
       '',
@@ -116,8 +106,8 @@ export function ConversationDetailPage() {
     ]
     for (const msg of conversation.messages) {
       const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1)
-      const time = new Date(msg.timestamp).toLocaleString()
-      lines.push(`### ${role} — ${time}`)
+      const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''
+      lines.push(`### ${role}${time ? ` — ${time}` : ''}`)
       lines.push('')
       lines.push(msg.content)
       lines.push('')
@@ -125,112 +115,240 @@ export function ConversationDetailPage() {
     downloadFile(
       lines.join('\n'),
       `conversation-${conversation.id}.md`,
-      'text/markdown'
+      'text/markdown',
     )
   }
+
+  const displayTitle = (fallback: string) => {
+    const t = conversation?.metadata_title ?? ''
+    return t || fallback || 'Conversación'
+  }
+
+  // Backend List endpoint returns the title in summaries; the detail endpoint
+  // returns `Conversation` which does NOT have `title`. Derive from conv.id
+  // for now; best-effort rename lives on the same conv.
+  const currentTitle = conversation ? displayTitle(conversation.id) : 'Conversación'
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-8 max-w-3xl mx-auto">
       {/* Back link + action buttons */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between" style={{ marginBottom: 20 }}>
         <Link
           to="/conversations"
-          className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
+          className="inline-flex items-center font-sans"
+          style={{ gap: 4, fontSize: 12, color: 'var(--ink-muted)' }}
         >
-          <ChevronLeft size={16} />
-          Conversations
+          ← Conversaciones
         </Link>
         {conversation && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={handleExportJSON}>
-              <Download size={14} />
+          <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
+            <button type="button" onClick={handleExportJSON} style={actionBtnStyle(false)}>
               JSON
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleExportMarkdown}>
-              <Download size={14} />
+            </button>
+            <button type="button" onClick={handleExportMarkdown} style={actionBtnStyle(false)}>
               Markdown
-            </Button>
-            <Button variant="destructive" size="sm" onClick={handleDelete}>
-              <Trash2 size={14} />
-              Delete
-            </Button>
+            </button>
+            <button type="button" onClick={handleResume} style={actionBtnStyle(true)}>
+              Retomar
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              style={{ ...actionBtnStyle(false), color: 'var(--red)' }}
+            >
+              Borrar
+            </button>
           </div>
         )}
       </div>
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-lg font-semibold text-text-primary">Conversation</h1>
+      {/* Preamble */}
+      <div className="font-sans" style={{ marginBottom: 24 }}>
+        {editingTitle ? (
+          <input
+            type="text"
+            defaultValue={currentTitle}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                renameConv((e.target as HTMLInputElement).value.trim())
+              } else if (e.key === 'Escape') {
+                setEditingTitle(false)
+              }
+            }}
+            onBlur={(e) => {
+              const v = e.target.value.trim()
+              if (v && v !== currentTitle) {
+                renameConv(v)
+              } else {
+                setEditingTitle(false)
+              }
+            }}
+            className="font-serif italic"
+            style={{
+              fontSize: 22,
+              lineHeight: 1.3,
+              color: 'var(--ink)',
+              padding: '4px 8px',
+              margin: '-4px -8px',
+              background: 'var(--bg-deep)',
+              border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+              borderRadius: 4,
+              outline: 'none',
+              width: '100%',
+            }}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            value={titleDraft || currentTitle}
+          />
+        ) : (
+          <h1
+            className="font-serif italic cursor-text"
+            style={{ fontSize: 22, lineHeight: 1.3, color: 'var(--ink)' }}
+            onClick={() => {
+              setTitleDraft(currentTitle)
+              setEditingTitle(true)
+            }}
+            title="Click para renombrar"
+          >
+            {currentTitle}
+          </h1>
+        )}
         {conversation && (
-          <p className="text-sm text-text-secondary mt-1">
-            <span className="font-mono">{conversation.channel_id}</span> &mdash; {conversation.messages.length} messages
-          </p>
+          <div
+            className="font-sans"
+            style={{
+              marginTop: 6,
+              fontSize: 12,
+              color: 'var(--ink-muted)',
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+            }}
+          >
+            <span className="font-mono">{conversation.channel_id}</span>
+            <span style={{ color: 'var(--ink-faint)' }}>·</span>
+            <span>{messages.length} mensajes cargados</span>
+            {hasNextPage && (
+              <>
+                <span style={{ color: 'var(--ink-faint)' }}>·</span>
+                <span className="font-serif italic">más arriba</span>
+              </>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="space-y-1">
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
+      {/* Load-more above */}
+      {hasNextPage && !loadingMsgs && (
+        <div style={{ marginBottom: 16, textAlign: 'center' }}>
+          <button
+            type="button"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="font-serif italic"
+            style={{
+              fontSize: 12,
+              color: 'var(--ink-soft)',
+              background: 'transparent',
+              border: '1px dashed var(--line)',
+              borderRadius: 4,
+              padding: '6px 14px',
+              cursor: isFetchingNextPage ? 'wait' : 'pointer',
+            }}
+          >
+            {isFetchingNextPage ? 'Cargando…' : 'Cargar anteriores'}
+          </button>
         </div>
       )}
 
-      {/* Error */}
-      {isError && (
-        <p className="text-sm text-error">Failed to load conversation.</p>
+      {/* Loading / errors */}
+      {(loadingMeta || loadingMsgs) && (
+        <div className="font-serif italic" style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
+          Cargando…
+        </div>
+      )}
+      {errorMeta && (
+        <div className="font-sans" style={{ fontSize: 13, color: 'var(--red)' }}>
+          No pude cargar esta conversación.
+        </div>
       )}
 
-      {/* Messages */}
-      {!isLoading && !isError && conversation && (
-        <div className="space-y-4">
-          {groups.map((group, gi) => (
-            <div key={gi}>
-              {/* Role label */}
-              <p className="text-xs font-medium text-text-disabled mb-1 font-mono uppercase tracking-wide">
-                {group.role === 'user' ? '> you' : group.role === 'assistant' ? '$ agent' : '@ tool'}
-              </p>
-
-              <div className="space-y-1">
-                {group.messages.map((msg, mi) => {
-                  if (msg.role === 'tool') {
-                    return <ToolMessage key={mi} message={msg} />
-                  }
-
-                  const isUser = msg.role === 'user'
-
-                  return (
-                    <div
-                      key={mi}
-                      className={`border-l-2 pl-4 py-2 ${
-                        isUser ? 'border-l-accent' : 'border-l-border-strong'
-                      }`}
-                    >
-                      <p className={`text-sm leading-relaxed whitespace-pre-wrap break-words text-text-primary ${
-                        !isUser ? 'font-mono' : ''
-                      }`}>
-                        {msg.content}
-                      </p>
-                      <p className="text-xs text-text-disabled font-mono mt-1">
-                        {relativeTime(msg.timestamp)}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+      {/* Messages — liminal thread style */}
+      {!loadingMeta && !errorMeta && messages.length > 0 && (
+        <div className="flex flex-col" style={{ gap: 14 }}>
+          {messages.map((m, i) => (
+            <ThreadMessage key={i} msg={m} />
           ))}
         </div>
       )}
 
-      {/* Empty conversation */}
-      {!isLoading && !isError && conversation && conversation.messages.length === 0 && (
-        <p className="text-sm text-text-secondary text-center py-12">
-          No messages in this conversation.
+      {/* Empty */}
+      {!loadingMeta && !errorMeta && messages.length === 0 && !loadingMsgs && (
+        <p
+          className="font-serif italic"
+          style={{ fontSize: 13, color: 'var(--ink-muted)', textAlign: 'center', padding: 48 }}
+        >
+          Sin mensajes en esta conversación.
         </p>
       )}
     </div>
   )
+}
+
+function ThreadMessage({ msg }: { msg: Message }) {
+  const isUser = msg.role === 'user'
+  const isTool = msg.role === 'tool'
+
+  return (
+    <div
+      className="font-sans"
+      style={{
+        borderLeft: `2px solid ${isUser ? 'var(--accent)' : 'var(--line-strong)'}`,
+        paddingLeft: 14,
+        paddingTop: 4,
+        paddingBottom: 4,
+      }}
+    >
+      <div
+        className="font-mono uppercase"
+        style={{ fontSize: 10.5, letterSpacing: 0.7, color: 'var(--ink-muted)', marginBottom: 4 }}
+      >
+        {isUser ? '> vos' : isTool ? '@ tool' : '$ agente'}
+      </div>
+      <div
+        className={isTool ? 'font-mono' : 'font-sans'}
+        style={{
+          fontSize: isTool ? 12 : 13.5,
+          lineHeight: 1.6,
+          color: 'var(--ink)',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}
+      >
+        {msg.content}
+      </div>
+      {msg.timestamp && (
+        <div
+          className="font-mono"
+          style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 4 }}
+        >
+          {formatTime(msg.timestamp)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function actionBtnStyle(primary: boolean) {
+  return {
+    fontSize: 11,
+    padding: '5px 12px',
+    borderRadius: 4,
+    fontFamily: 'inherit',
+    fontWeight: 500,
+    cursor: 'pointer',
+    background: primary ? 'var(--accent)' : 'transparent',
+    color: primary ? 'var(--bg-elev)' : 'var(--ink-soft)',
+    border: primary ? 'none' : '1px solid var(--line)',
+  } as const
 }

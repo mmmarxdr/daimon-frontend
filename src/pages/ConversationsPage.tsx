@@ -1,199 +1,216 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConversations } from '../hooks/useApi'
-import { api } from '../api/client'
-import { Badge } from '../components/ui/Badge'
-import { Button } from '../components/ui/Button'
-import { Input } from '../components/ui/Input'
-import { MessageSquare, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
-import { cn } from '../lib/utils'
+import { api, type ConversationSummary } from '../api/client'
+import {
+  bucketForTimestamp,
+  TIME_BUCKET_ORDER,
+  type TimeBucket,
+} from '../utils/timeBuckets'
+import { ConversationCard } from '../components/liminal/conversations/ConversationCard'
+import { TimeClusterHeader } from '../components/liminal/conversations/TimeClusterHeader'
+import { ConversationsPreamble } from '../components/liminal/conversations/ConversationsPreamble'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
 
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
-}
-
-function channelVariant(channel: string): 'accent' | 'default' {
-  const accentChannels = ['cli', 'telegram', 'discord', 'dashboard']
-  return accentChannels.includes(channel.toLowerCase()) ? 'accent' : 'default'
-}
-
-function SkeletonRow() {
+function matchesSearch(conv: ConversationSummary, q: string): boolean {
+  if (!q) return true
+  const needle = q.toLowerCase()
   return (
-    <div className="grid grid-cols-[120px_1fr_36px] lg:grid-cols-[120px_1fr_120px_60px_36px] gap-4 items-center px-4 py-3 border-b border-border last:border-0">
-      <div className="h-5 w-16 animate-pulse bg-hover-surface rounded-sm" />
-      <div className="flex-1 h-4 animate-pulse bg-hover-surface rounded" />
-      <div className="h-4 w-20 animate-pulse bg-hover-surface rounded hidden lg:block" />
-      <div className="h-4 w-10 animate-pulse bg-hover-surface rounded hidden lg:block" />
-      <div className="h-6 w-6 animate-pulse bg-hover-surface rounded" />
-    </div>
+    conv.title.toLowerCase().includes(needle) ||
+    conv.last_message.toLowerCase().includes(needle) ||
+    conv.channel_id.toLowerCase().includes(needle)
   )
 }
 
 export function ConversationsPage() {
   const navigate = useNavigate()
-  const [page, setPage] = useState(0)
-  const [channelFilter, setChannelFilter] = useState('')
   const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
 
   const { data, isLoading, isError } = useConversations({
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    channel: channelFilter || undefined,
   })
 
   const { mutate: deleteConv } = useMutation({
     mutationFn: (id: string) => api.deleteConversation(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onMutate: async (id: string) => {
+      // Optimistic update so the card disappears immediately.
+      await qc.cancelQueries({ queryKey: ['conversations'] })
+      const prev = qc.getQueryData<{ items: ConversationSummary[]; total: number }>([
+        'conversations',
+        { limit: PAGE_SIZE, offset: page * PAGE_SIZE },
+      ])
+      qc.setQueryData(
+        ['conversations', { limit: PAGE_SIZE, offset: page * PAGE_SIZE }],
+        (old: { items: ConversationSummary[]; total: number } | undefined) =>
+          old
+            ? { ...old, items: old.items.filter((c) => c.id !== id), total: Math.max(0, old.total - 1) }
+            : old,
+      )
+      return { prev, id }
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(
+          ['conversations', { limit: PAGE_SIZE, offset: page * PAGE_SIZE }],
+          ctx.prev,
+        )
+      }
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
   })
+
+  const items = data?.items ?? []
+  const filtered = useMemo(
+    () => items.filter((c) => matchesSearch(c, search)),
+    [items, search],
+  )
+
+  // Group into time buckets, anchored to the render-time `now` (stable
+  // within a single render pass).
+  const grouped = useMemo(() => {
+    const now = new Date()
+    const byBucket = new Map<TimeBucket, ConversationSummary[]>()
+    for (const c of filtered) {
+      const b = bucketForTimestamp(new Date(c.updated_at), now)
+      const arr = byBucket.get(b) ?? []
+      arr.push(c)
+      byBucket.set(b, arr)
+    }
+    return byBucket
+  }, [filtered])
+
+  const handleOpen = (id: string) => navigate(`/conversations/${encodeURIComponent(id)}`)
+  const handleDelete = (id: string) => {
+    if (window.confirm('¿Eliminar esta conversación? Podés restaurarla dentro de los próximos 30 días desde la base de datos.')) {
+      deleteConv(id)
+    }
+  }
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setChannelFilter(e.target.value)
-    setPage(0)
-  }
-
   return (
-    <div className="px-6 md:px-8 py-6 md:py-8 max-w-[1200px] mx-auto">
-      <div className="mb-8">
-        <h1 className="text-lg font-semibold text-text-primary">Conversations</h1>
-        <p className="text-sm text-text-secondary mt-1">Browse and inspect conversation history.</p>
-      </div>
+    <div className="px-6 md:px-8 py-6 md:py-8 max-w-[900px] mx-auto">
+      <ConversationsPreamble count={items.length} />
 
-      {/* Search / filter */}
-      <div className="mb-4 max-w-sm">
-        <Input
-          placeholder="Filter by channel (e.g. cli, telegram)…"
-          value={channelFilter}
-          onChange={handleSearch}
-        />
-      </div>
-
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <div className="border-t border-border overflow-hidden">
-          {/* Header */}
-          <div className="grid grid-cols-[120px_1fr_36px] lg:grid-cols-[120px_1fr_120px_60px_36px] gap-4 px-4 py-3 border-b border-border">
-            <span className="text-xs font-medium text-text-secondary uppercase tracking-wide">Channel</span>
-            <span className="text-xs font-medium text-text-secondary uppercase tracking-wide">Preview</span>
-            <span className={cn('text-xs font-medium text-text-secondary uppercase tracking-wide', 'hidden lg:block')}>Last activity</span>
-            <span className={cn('text-xs font-medium text-text-secondary uppercase tracking-wide text-right', 'hidden lg:block')}>Msgs</span>
-            <span />
-          </div>
-
-          {/* Loading */}
-          {isLoading && (
-            <>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <SkeletonRow key={i} />
-              ))}
-            </>
-          )}
-
-          {/* Error */}
-          {isError && (
-            <div className="px-4 py-8 text-center text-sm text-error">
-              Failed to load conversations.
-            </div>
-          )}
-
-          {/* Empty state */}
-          {!isLoading && !isError && data?.items.length === 0 && (
-            <div className="px-4 py-12 text-center">
-              <MessageSquare size={32} className="mx-auto mb-3 text-text-disabled" />
-              <p className="text-sm text-text-secondary">No conversations yet.</p>
-            </div>
-          )}
-
-          {/* Rows */}
-          {!isLoading &&
-            !isError &&
-            data?.items.map((conv) => {
-              const preview = conv.last_message
-                ? conv.last_message.slice(0, 80) + (conv.last_message.length > 80 ? '…' : '')
-                : '(no messages)'
-
-              return (
-                <div
-                  key={conv.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/conversations/${conv.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') navigate(`/conversations/${conv.id}`)
-                  }}
-                  className="group grid grid-cols-[120px_1fr_36px] lg:grid-cols-[120px_1fr_120px_60px_36px] gap-4 items-center px-4 py-3 border-b border-border last:border-0 hover:bg-hover-surface cursor-pointer transition-colors focus:outline-none focus:bg-accent-light"
-                >
-                  <div>
-                    <Badge variant={channelVariant(conv.channel_id)}>
-                      {conv.channel_id}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-text-primary truncate">{preview}</p>
-                  <p className="text-xs text-text-secondary font-mono hidden lg:block">
-                    {relativeTime(conv.updated_at)}
-                  </p>
-                  <p className="text-xs text-text-secondary font-mono text-right hidden lg:block">
-                    {conv.message_count}
-                  </p>
-                  <div className="flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-error hover:bg-error/10 p-1.5"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (window.confirm('Delete this conversation?')) {
-                          deleteConv(conv.id)
-                        }
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
+      {/* Search */}
+      {items.length > 0 && (
+        <div className="mb-6" style={{ maxWidth: 360 }}>
+          <input
+            type="text"
+            placeholder="Buscar por título, canal o mensaje…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="font-sans w-full"
+            style={{
+              fontSize: 13,
+              padding: '8px 12px',
+              background: 'var(--bg-elev)',
+              border: '1px solid var(--line)',
+              borderRadius: 6,
+              color: 'var(--ink)',
+              outline: 'none',
+            }}
+          />
         </div>
-      </div>
+      )}
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="font-serif italic" style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
+          Cargando…
+        </div>
+      )}
+
+      {/* Error */}
+      {isError && (
+        <div className="font-sans" style={{ fontSize: 13, color: 'var(--red)' }}>
+          No pude cargar las conversaciones.
+        </div>
+      )}
+
+      {/* Grouped cards */}
+      {!isLoading && !isError && filtered.length > 0 && (
+        <div className="flex flex-col" style={{ gap: 28 }}>
+          {TIME_BUCKET_ORDER.map((bucket) => {
+            const convs = grouped.get(bucket) ?? []
+            if (convs.length === 0) return null
+            return (
+              <section key={bucket}>
+                <TimeClusterHeader bucket={bucket} count={convs.length} />
+                <div className="flex flex-col" style={{ gap: 8 }}>
+                  {convs.map((c) => (
+                    <ConversationCard
+                      key={c.id}
+                      conv={c}
+                      onOpen={handleOpen}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Client-side filter: nothing matches */}
+      {!isLoading && !isError && items.length > 0 && filtered.length === 0 && (
+        <div
+          className="font-serif italic"
+          style={{ fontSize: 13, color: 'var(--ink-muted)', marginTop: 12 }}
+        >
+          Nada coincide con "{search}".
+        </div>
+      )}
 
       {/* Pagination */}
       {!isLoading && !isError && totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-text-secondary font-mono">
-            Page {page + 1} of {totalPages} &mdash; {data?.total} total
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
+        <div
+          className="mt-8 flex items-center justify-between font-mono"
+          style={{ fontSize: 11, color: 'var(--ink-muted)' }}
+        >
+          <span>
+            Página {page + 1} de {totalPages} · {data?.total} totales
+          </span>
+          <div className="flex" style={{ gap: 8 }}>
+            <button
+              type="button"
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
+              style={paginationBtnStyle(page === 0)}
             >
-              <ChevronLeft size={14} />
-              Prev
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
+              ← Anterior
+            </button>
+            <button
+              type="button"
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
+              style={paginationBtnStyle(page >= totalPages - 1)}
             >
-              Next
-              <ChevronRight size={14} />
-            </Button>
+              Siguiente →
+            </button>
           </div>
         </div>
       )}
     </div>
   )
+}
+
+function paginationBtnStyle(disabled: boolean) {
+  return {
+    fontSize: 11,
+    padding: '4px 10px',
+    borderRadius: 4,
+    fontFamily: 'inherit',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    background: 'transparent',
+    color: disabled ? 'var(--ink-faint)' : 'var(--ink-soft)',
+    border: '1px solid var(--line)',
+    opacity: disabled ? 0.5 : 1,
+  } as const
 }

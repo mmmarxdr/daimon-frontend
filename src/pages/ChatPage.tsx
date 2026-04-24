@@ -319,6 +319,23 @@ function FilesDrawer({ open, onClose }: { open: boolean; onClose: () => void }) 
 // Main page
 // ─────────────────────────────────────────────────────────────────
 export function ChatPage() {
+  // Resume handoff from ConversationDetailPage or deep link:
+  // /chat?conversation_id=<id> (also accepts ?resume=<id> as a UX alias).
+  // When set, the WS upgrade carries the convID as a query param and the
+  // backend binds this session to that conversation's identity via
+  // IncomingMessage.ConversationID.
+  //
+  // We read from window.location directly (computed once at mount) rather
+  // than react-router-dom's useSearchParams to avoid requiring a Router
+  // context in the 100+ ChatPage unit tests that render the component
+  // standalone. For resume we only need a one-shot read, not reactive
+  // updates, so the simpler path is the right one.
+  const resumeConvID = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    const params = new URLSearchParams(window.location.search)
+    return (params.get('conversation_id') ?? params.get('resume') ?? '').trim()
+  }, [])
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isWaiting, setIsWaiting] = useState(false)
@@ -625,7 +642,15 @@ export function ChatPage() {
     }
   }, [bakeReasoningIfFirst, resetTurnReasoning])
 
-  const { status, send } = useWebSocket({ path: '/ws/chat', onMessage: handleWsMessage })
+  const wsSearchParams = useMemo(
+    () => (resumeConvID ? { conversation_id: resumeConvID } : undefined),
+    [resumeConvID],
+  )
+  const { status, send } = useWebSocket({
+    path: '/ws/chat',
+    onMessage: handleWsMessage,
+    searchParams: wsSearchParams,
+  })
 
   // ── Auto-scroll
   useEffect(() => {
