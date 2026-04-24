@@ -84,7 +84,7 @@ export function ConversationsPage() {
     return byBucket
   }, [filtered])
 
-  const handleOpen = (id: string) => navigate(`/conversations/${encodeURIComponent(id)}`)
+  const handleOpen = (id: string) => navigate(`/chat?conversation_id=${encodeURIComponent(id)}`)
   const handleDelete = (id: string) => {
     if (window.confirm('¿Eliminar esta conversación? Podés restaurarla dentro de los próximos 30 días desde la base de datos.')) {
       deleteConv(id)

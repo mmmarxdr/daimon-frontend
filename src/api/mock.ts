@@ -2,7 +2,7 @@
 // Provides in-memory implementations of the real API and WebSocket interfaces.
 // Activated when VITE_MOCK === 'true'. Never imported in production builds.
 
-import type { AgentStatus, ApiKnowledgeDoc, MetricsSnapshot, Conversation, ConversationSummary, MemoryEntry, MCPServer, MCPServerConfig, MCPTestResult, UploadResponse, MediaMeta } from './client'
+import type { AgentStatus, ApiKnowledgeDoc, MetricsSnapshot, Conversation, ConversationSummary, MemoryEntry, MessagesPage, MCPServer, MCPServerConfig, MCPTestResult, UploadResponse, MediaMeta } from './client'
 import { uuid } from '../lib/uuid'
 import {
   seedStatus,
@@ -85,13 +85,18 @@ export const mockApi = {
     const offset = params?.offset ?? 0
     const limit  = params?.limit  ?? 20
     const page   = items.slice(offset, offset + limit)
-    const summaries: ConversationSummary[] = page.map(c => ({
-      id:            c.id,
-      channel_id:    c.channel_id,
-      message_count: c.messages.length,
-      last_message:  c.messages.length > 0 ? c.messages[c.messages.length - 1].content : '',
-      updated_at:    c.updated_at,
-    }))
+    const summaries: ConversationSummary[] = page.map(c => {
+      const firstUser = c.messages.find(m => m.role === 'user')
+      const truncated = firstUser ? firstUser.content.slice(0, 60) : ''
+      return {
+        id:            c.id,
+        channel_id:    c.channel_id,
+        title:         truncated,
+        message_count: c.messages.length,
+        last_message:  c.messages.length > 0 ? c.messages[c.messages.length - 1].content : '',
+        updated_at:    c.updated_at,
+      }
+    })
     return delay({ items: summaries, total })
   },
 
@@ -99,6 +104,30 @@ export const mockApi = {
     const conv = mockState.conversations.find(c => c.id === id)
     if (!conv) return Promise.reject(new Error(`Conversation ${id} not found`))
     return delay({ ...conv, messages: [...conv.messages] })
+  },
+
+  conversationMessages: (id: string, params?: { before?: number; limit?: number }): Promise<MessagesPage> => {
+    const conv = mockState.conversations.find(c => c.id === id)
+    if (!conv) return Promise.reject(new Error(`Conversation ${id} not found`))
+    const limit = params?.limit ?? 50
+    const total = conv.messages.length
+    const before = params?.before !== undefined && params.before >= 0 ? params.before : total
+    const start = Math.max(0, before - limit)
+    return delay({
+      messages: conv.messages.slice(start, before),
+      oldest_index: start,
+      has_more: start > 0,
+    })
+  },
+
+  renameConversation: (id: string, title: string): Promise<{ id: string; title: string }> => {
+    const conv = mockState.conversations.find(c => c.id === id)
+    if (!conv) return Promise.reject(new Error(`Conversation ${id} not found`))
+    return delay({ id, title })
+  },
+
+  restoreConversation: (id: string): Promise<{ id: string; restored: boolean }> => {
+    return delay({ id, restored: true })
   },
 
   // ── Task 2.3: Mutation endpoints ──

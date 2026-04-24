@@ -8,7 +8,6 @@ import { AppLayout } from './components/layout/AppLayout'
 import { OverviewPage } from './pages/OverviewPage'
 import { MetricsPage } from './pages/MetricsPage'
 import { ConversationsPage } from './pages/ConversationsPage'
-import { ConversationDetailPage } from './pages/ConversationDetailPage'
 import { MemoryPage } from './pages/MemoryPage'
 import { ChatPage } from './pages/ChatPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -45,7 +44,6 @@ function AuthedApp() {
               <Route index element={<OverviewPage />} />
               <Route path="metrics" element={<MetricsPage />} />
               <Route path="conversations" element={<ConversationsPage />} />
-              <Route path="conversations/:id" element={<ConversationDetailPage />} />
               <Route path="memory" element={<MemoryPage />} />
               <Route path="chat" element={<ChatPage />} />
               <Route path="tools" element={<ToolsPage />} />

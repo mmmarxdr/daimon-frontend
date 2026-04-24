@@ -319,11 +319,12 @@ function FilesDrawer({ open, onClose }: { open: boolean; onClose: () => void }) 
 // Main page
 // ─────────────────────────────────────────────────────────────────
 export function ChatPage() {
-  // Resume handoff from ConversationDetailPage or deep link:
+  // Resume handoff from the conversations list or deep link:
   // /chat?conversation_id=<id> (also accepts ?resume=<id> as a UX alias).
   // When set, the WS upgrade carries the convID as a query param and the
   // backend binds this session to that conversation's identity via
-  // IncomingMessage.ConversationID.
+  // IncomingMessage.ConversationID. The historical messages are hydrated
+  // from REST below so the user sees the prior thread on entry.
   //
   // We read from window.location directly (computed once at mount) rather
   // than react-router-dom's useSearchParams to avoid requiring a Router
@@ -652,6 +653,48 @@ export function ChatPage() {
     searchParams: wsSearchParams,
   })
 
+  // ── Resume hydration: when the page is opened with ?conversation_id=X,
+  // load the latest window of historical messages from REST and seed the
+  // thread so the user sees what they had before, not an empty surface.
+  // The WS layer continues to deliver new turns on top of this.
+  //
+  // Direct fetch (no react-query) so the 100+ existing ChatPage unit tests
+  // don't need a QueryClientProvider wrapper — they don't pass a
+  // ?conversation_id, so `resumeConvID` is empty and the effect short-circuits.
+  //
+  // Limitation v1: the backend `/api/conversations/:id/messages` endpoint
+  // returns only `{role, content, timestamp}` (no tool calls, no reasoning),
+  // so historical tool invocations and thinking render as plain text/empty.
+  // Future work to bring full fidelity requires extending the wire shape.
+  const [historyLoading, setHistoryLoading] = useState<boolean>(!!resumeConvID)
+  useEffect(() => {
+    if (!resumeConvID) return
+    let cancelled = false
+    setHistoryLoading(true)
+    api
+      .conversationMessages(resumeConvID, { limit: 50 })
+      .then((page) => {
+        if (cancelled) return
+        const out: ChatMessage[] = page.messages.map((m) => ({
+          id: uuid(),
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+        }))
+        setMessages((prev) => (prev.length === 0 ? out : prev))
+      })
+      .catch(() => {
+        // Swallow: the chat still works, the user just won't see history.
+        // The WS hookup is independent and remains functional.
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [resumeConvID])
+
   // ── Auto-scroll
   useEffect(() => {
     if (autoScroll) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -830,7 +873,18 @@ export function ChatPage() {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto"
       >
-        {turns.length === 0 && !showLiveReasoning && (
+        {turns.length === 0 && !showLiveReasoning && resumeConvID && historyLoading && (
+          <div className="flex flex-col items-center justify-center h-full text-center px-8">
+            <p
+              className="font-serif italic"
+              style={{ fontSize: 14, color: 'var(--ink-muted)' }}
+            >
+              recuperando la conversación…
+            </p>
+          </div>
+        )}
+
+        {turns.length === 0 && !showLiveReasoning && !(resumeConvID && historyLoading) && (
           <div className="flex flex-col items-center justify-center h-full text-center px-8">
             <p
               className="font-serif italic"

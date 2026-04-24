@@ -14,7 +14,8 @@ vi.mock('../../api/client', async (importOriginal) => {
   }
 })
 
-import { api, MessagesPage } from '../../api/client'
+import { api } from '../../api/client'
+import type { MessagesPage } from '../../api/client'
 import { useResumeSession } from '../useResumeSession'
 
 function makeWrapper() {
