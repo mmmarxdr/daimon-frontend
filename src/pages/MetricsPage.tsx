@@ -1,8 +1,9 @@
-import React from 'react'
-import { AreaChart, BarChart } from '@tremor/react'
+import { type CSSProperties } from 'react'
 import { useMetricsHistory, useMetrics } from '../hooks/useApi'
-import { Card } from '../components/ui/Card'
-import { cn } from '../lib/utils'
+import { LiminalGlyph } from '../components/liminal/LiminalGlyph'
+import { LiminalAreaChart } from '../components/liminal/charts/LiminalAreaChart'
+import { LiminalBarChart } from '../components/liminal/charts/LiminalBarChart'
+import { formatUSD, formatTokens } from '../lib/format'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -11,52 +12,124 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function fmtCost(usd: number): string {
-  return `$${usd.toFixed(4)}`
+// ─── Card primitives (shared with OverviewPage style) ────────────────────────
+
+const cardBaseStyle: CSSProperties = {
+  background: 'var(--bg-elev)',
+  border: '1px solid var(--line)',
+  borderRadius: 6,
+  padding: '18px 20px',
 }
 
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-  return String(n)
+const labelStyle: CSSProperties = {
+  fontSize: 10.5,
+  letterSpacing: 1,
+  color: 'var(--ink-muted)',
+  textTransform: 'uppercase',
 }
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SummaryCard({
   label,
   value,
-  sub,
+  hint,
 }: {
   label: string
   value: string
-  sub?: string
+  hint?: string
 }) {
   return (
-    <Card>
-      <p className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">
+    <div style={cardBaseStyle}>
+      <div className="font-mono" style={labelStyle}>
         {label}
-      </p>
-      <p className="text-xl font-semibold font-mono text-text-primary">{value}</p>
-      {sub && <p className="text-xs text-text-secondary mt-1">{sub}</p>}
-    </Card>
+      </div>
+      <div
+        className="font-mono"
+        style={{
+          fontSize: 22,
+          fontWeight: 500,
+          color: 'var(--ink)',
+          lineHeight: 1.1,
+          marginTop: 10,
+        }}
+      >
+        {value}
+      </div>
+      {hint && (
+        <div
+          className="font-serif italic"
+          style={{ fontSize: 11.5, color: 'var(--ink-muted)', marginTop: 4 }}
+        >
+          {hint}
+        </div>
+      )}
+    </div>
   )
 }
 
 function ChartCard({
   title,
+  subtitle,
   children,
-  className,
 }: {
   title: string
+  subtitle?: string
   children: React.ReactNode
-  className?: string
 }) {
   return (
-    <Card className={cn('', className)}>
-      <h3 className="text-sm font-semibold text-text-primary mb-4">{title}</h3>
+    <div style={{ ...cardBaseStyle, padding: '20px 22px 22px' }}>
+      <div style={{ marginBottom: 14 }}>
+        <div
+          className="font-serif"
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            color: 'var(--ink)',
+            letterSpacing: -0.2,
+          }}
+        >
+          {title}
+        </div>
+        {subtitle && (
+          <div
+            className="font-serif italic"
+            style={{ fontSize: 11.5, color: 'var(--ink-muted)', marginTop: 2 }}
+          >
+            {subtitle}
+          </div>
+        )}
+      </div>
       {children}
-    </Card>
+    </div>
+  )
+}
+
+function EmptyCard({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div
+      style={{
+        ...cardBaseStyle,
+        padding: '40px 24px',
+        textAlign: 'center',
+      }}
+    >
+      <p
+        className="font-serif italic"
+        style={{ fontSize: 14, color: 'var(--ink-muted)', margin: 0 }}
+      >
+        {title}
+      </p>
+      <p
+        className="font-mono"
+        style={{
+          fontSize: 11,
+          color: 'var(--ink-faint)',
+          marginTop: 6,
+          letterSpacing: 0.5,
+        }}
+      >
+        {hint}
+      </p>
+    </div>
   )
 }
 
@@ -68,132 +141,172 @@ export function MetricsPage() {
 
   const history = history30?.history ?? []
 
-  // Derived summary
   const totalTokens = history.reduce(
     (s, d) => s + d.input_tokens + d.output_tokens,
     0,
   )
   const totalCost = history.reduce((s, d) => s + d.cost_usd, 0)
-  const avgCost = history.length > 0 ? totalCost / history.length : 0
+  // Average over days that actually had activity, not the full 30-day window
+  // (which would dilute the signal if the agent has only been used recently).
+  const activeDays = history.filter((d) => d.input_tokens + d.output_tokens > 0).length
+  const avgCost = activeDays > 0 ? totalCost / activeDays : 0
 
-  // Chart data transforms
-  const tokenData = history.map((d) => ({
-    date: fmtDate(d.date),
-    'Input tokens': d.input_tokens,
-    'Output tokens': d.output_tokens,
-  }))
-
-  const costData = history.map((d) => ({
-    date: fmtDate(d.date),
-    'Cost (USD)': parseFloat(d.cost_usd.toFixed(6)),
-  }))
-
-
-  // ─── Loading skeleton ────────────────────────────────────────────────────
-
-  if (histLoading) {
-    return (
-      <div className="px-6 md:px-8 py-6 md:py-8 max-w-[1200px] mx-auto space-y-4">
-        <div className="h-7 w-48 animate-pulse bg-hover-surface rounded" />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {['a', 'b', 'c'].map((k) => (
-            <div key={k} className="h-24 animate-pulse bg-surface rounded-md border border-border" />
-          ))}
-        </div>
-        <div className="h-64 animate-pulse bg-surface rounded-md border border-border" />
-        <div className="h-64 animate-pulse bg-surface rounded-md border border-border" />
-      </div>
-    )
-  }
+  const labels = history.map((d) => fmtDate(d.date))
+  const inputSeries = history.map((d) => d.input_tokens)
+  const outputSeries = history.map((d) => d.output_tokens)
+  const costSeries = history.map((d) => d.cost_usd)
 
   return (
-    <div className="px-6 md:px-8 py-6 md:py-8 max-w-[1200px] mx-auto space-y-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-lg font-semibold text-text-primary">Metrics</h1>
-        <p className="text-sm text-text-secondary mt-1">
-          Historical token usage and cost breakdown.
+    <div
+      style={{
+        padding: '28px 32px 40px',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}
+    >
+      {/* Preamble */}
+      <div style={{ marginBottom: 28 }}>
+        <div className="flex items-baseline" style={{ gap: 14, marginBottom: 6 }}>
+          <LiminalGlyph size={20} animate />
+          <h1
+            className="font-serif"
+            style={{
+              margin: 0,
+              fontSize: 28,
+              fontWeight: 500,
+              color: 'var(--ink)',
+              letterSpacing: -0.6,
+            }}
+          >
+            <span className="italic" style={{ color: 'var(--accent)', fontWeight: 400 }}>
+              what I've been costing
+            </span>
+            <span style={{ color: 'var(--ink-muted)', fontWeight: 400 }}>&nbsp;·&nbsp;</span>
+            <span>last 30 days</span>
+          </h1>
+        </div>
+        <p
+          className="font-serif italic"
+          style={{
+            fontSize: 14.5,
+            color: 'var(--ink-soft)',
+            maxWidth: 640,
+            lineHeight: 1.55,
+            marginLeft: 34,
+            marginTop: 0,
+          }}
+        >
+          tokens flow in, tokens flow out, dollars get spent — here's the shape
+          of it over time.
         </p>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 10,
+          marginBottom: 18,
+        }}
+      >
         <SummaryCard
-          label="Total tokens (30d)"
-          value={fmtTokens(totalTokens)}
-          sub={`Today: ${fmtTokens(
+          label="TOTAL TOKENS · 30D"
+          value={formatTokens(totalTokens)}
+          hint={`today: ${formatTokens(
             (metrics?.today.input_tokens ?? 0) + (metrics?.today.output_tokens ?? 0),
           )}`}
         />
         <SummaryCard
-          label="Total cost (30d)"
-          value={fmtCost(totalCost)}
-          sub={`Today: ${fmtCost(metrics?.today.cost_usd ?? 0)}`}
+          label="TOTAL COST · 30D"
+          value={formatUSD(totalCost)}
+          hint={`today: ${formatUSD(metrics?.today.cost_usd ?? 0)}`}
         />
         <SummaryCard
-          label="Avg cost / day"
-          value={fmtCost(avgCost)}
-          sub={`${history.length} days of data`}
+          label="AVG COST / ACTIVE DAY"
+          value={formatUSD(avgCost)}
+          hint={`${activeDays} day${activeDays === 1 ? '' : 's'} of activity`}
         />
       </div>
 
-      {history.length === 0 ? (
-        <Card className="py-16 text-center">
-          <p className="text-sm text-text-secondary">No historical data yet.</p>
-          <p className="text-xs text-text-disabled mt-1">
-            Data accumulates as the agent processes messages.
+      {/* Loading skeleton */}
+      {histLoading && (
+        <div
+          style={{
+            ...cardBaseStyle,
+            height: 220,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <p className="font-serif italic" style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
+            gathering the days…
           </p>
-        </Card>
-      ) : (
-        <>
-          {/* Token usage AreaChart — emerald only */}
-          <ChartCard title="Token Usage — Last 30 Days">
-            <AreaChart
-              data={tokenData}
-              index="date"
-              categories={['Input tokens', 'Output tokens']}
-              colors={['emerald', 'stone']}
-              showLegend
-              showGridLines={false}
-              className="h-52"
-              valueFormatter={fmtTokens}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!histLoading && totalTokens === 0 && (
+        <EmptyCard
+          title="no history yet."
+          hint="data accumulates as we exchange messages."
+        />
+      )}
+
+      {/* Charts */}
+      {!histLoading && totalTokens > 0 && (
+        <div className="flex flex-col" style={{ gap: 14 }}>
+          <ChartCard title="Token usage" subtitle="input + output, stacked, day by day">
+            <LiminalAreaChart
+              labels={labels}
+              series={[
+                {
+                  name: 'output',
+                  values: outputSeries,
+                  color: 'var(--ink-soft)',
+                  fillOpacity: 0.10,
+                },
+                {
+                  name: 'input',
+                  values: inputSeries,
+                  color: 'var(--accent)',
+                  fillOpacity: 0.16,
+                },
+              ]}
+              height={220}
+              formatValue={formatTokens}
             />
           </ChartCard>
 
-          {/* Cost BarChart — emerald only */}
-          <ChartCard title="Daily Cost — Last 30 Days">
-            <BarChart
-              data={costData}
-              index="date"
-              categories={['Cost (USD)']}
-              colors={['emerald']}
-              showGridLines={false}
-              className="h-52"
-              valueFormatter={(v: number) => `$${v.toFixed(4)}`}
+          <ChartCard title="Daily cost" subtitle="USD spent per day">
+            <LiminalBarChart
+              labels={labels}
+              values={costSeries}
+              seriesName="cost"
+              color="var(--accent)"
+              height={200}
+              formatValue={(n) => formatUSD(n)}
             />
           </ChartCard>
 
-          {/* Bottom row: upcoming charts */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <ChartCard title="Model Breakdown">
-              <div className="flex flex-col items-center justify-center h-40 text-center">
-                <p className="text-sm text-text-secondary">Coming soon</p>
-                <p className="text-xs text-text-disabled mt-1">
-                  Per-model usage breakdown will appear in a future update.
-                </p>
-              </div>
-            </ChartCard>
-
-            <ChartCard title="Conversations — Last 14 Days">
-              <div className="flex flex-col items-center justify-center h-40 text-center">
-                <p className="text-sm text-text-secondary">Coming soon</p>
-                <p className="text-xs text-text-disabled mt-1">
-                  Per-day conversation counts will appear in a future update.
-                </p>
-              </div>
-            </ChartCard>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 14,
+            }}
+          >
+            <EmptyCard
+              title="model breakdown"
+              hint="per-model usage — coming soon"
+            />
+            <EmptyCard
+              title="conversations"
+              hint="daily conversation counts — coming soon"
+            />
           </div>
-        </>
+        </div>
       )}
     </div>
   )

@@ -1,127 +1,274 @@
+import { type CSSProperties } from 'react'
 import { useStatus, useMetrics, useMemory, useConfig } from '../hooks/useApi'
-import { Card } from '../components/ui/Card'
-import { Badge } from '../components/ui/Badge'
-import { cn } from '../lib/utils'
+import { LiminalGlyph } from '../components/liminal/LiminalGlyph'
+import { formatUSD, formatTokens } from '../lib/format'
+
+// ─── Formatting helpers ─────────────────────────────────────────────────────
+
+function fmtUptime(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h === 0) return `${m}m`
+  return `${h}h ${m}m`
+}
+
+// ─── Card primitive ─────────────────────────────────────────────────────────
+
+interface StatCardProps {
+  label: string
+  value: string | number
+  hint?: string
+  accent?: boolean
+  loading?: boolean
+  error?: boolean
+  monoValue?: boolean
+}
+
+const cardStyle = (accent: boolean): CSSProperties => ({
+  background: 'var(--bg-elev)',
+  border: `1px solid var(--line)`,
+  borderLeft: accent ? '2px solid var(--accent)' : '1px solid var(--line)',
+  borderRadius: 6,
+  padding: '16px 18px',
+  minHeight: 88,
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'space-between',
+})
+
+const labelStyle: CSSProperties = {
+  fontSize: 10.5,
+  letterSpacing: 1,
+  color: 'var(--ink-muted)',
+  textTransform: 'uppercase',
+}
 
 function StatCard({
   label,
   value,
-  sub,
-  mono = false,
+  hint,
+  accent = false,
   loading = false,
   error = false,
-}: {
-  label: string
-  value: string | number
-  sub?: string
-  mono?: boolean
-  loading?: boolean
-  error?: boolean
-}) {
+  monoValue = false,
+}: StatCardProps) {
   return (
-    <Card>
-      <p className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">{label}</p>
-      {loading ? (
-        <div className="h-7 w-24 animate-pulse bg-hover-surface rounded" />
-      ) : error ? (
-        <p className="text-sm text-error">Failed to load</p>
-      ) : (
-        <>
-          <p className={cn('text-xl font-semibold text-text-primary', mono && 'font-mono')}>{value}</p>
-          {sub && <p className="text-xs text-text-secondary mt-1">{sub}</p>}
-        </>
-      )}
-    </Card>
+    <div style={cardStyle(accent)}>
+      <div className="font-mono" style={labelStyle}>
+        {label}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        {loading ? (
+          <div
+            style={{
+              height: 24,
+              width: 72,
+              background: 'var(--bg-deep)',
+              borderRadius: 3,
+              animation: 'pulse 1.8s ease-in-out infinite',
+            }}
+          />
+        ) : error ? (
+          <div className="font-serif italic" style={{ fontSize: 13, color: 'var(--red)' }}>
+            couldn't read this.
+          </div>
+        ) : (
+          <>
+            <div
+              className={monoValue ? 'font-mono' : 'font-sans'}
+              style={{
+                fontSize: 22,
+                fontWeight: 500,
+                color: 'var(--ink)',
+                letterSpacing: monoValue ? 0 : -0.3,
+                lineHeight: 1.1,
+              }}
+            >
+              {value}
+            </div>
+            {hint && (
+              <div
+                className="font-serif italic"
+                style={{ fontSize: 11.5, color: 'var(--ink-muted)', marginTop: 4 }}
+              >
+                {hint}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   )
+}
+
+// ─── Status card (special — has a breathing dot) ────────────────────────────
+
+const STATUS_COPY: Record<string, { label: string; tone: 'teal' | 'muted' | 'red' }> = {
+  running: { label: 'listening', tone: 'teal' },
+  idle:    { label: 'quiet',     tone: 'muted' },
+  error:   { label: 'troubled',  tone: 'red' },
 }
 
 function StatusCard() {
   const { data, isLoading, isError } = useStatus()
 
-  const variantMap: Record<string, 'success' | 'default' | 'error'> = {
-    running: 'success',
-    idle:    'default',
-    error:   'error',
+  if (isLoading) {
+    return (
+      <div style={cardStyle(true)}>
+        <div className="font-mono" style={labelStyle}>
+          STATUS
+        </div>
+        <div
+          style={{
+            height: 24,
+            width: 96,
+            background: 'var(--bg-deep)',
+            borderRadius: 3,
+            animation: 'pulse 1.8s ease-in-out infinite',
+            marginTop: 10,
+          }}
+        />
+      </div>
+    )
   }
 
-  const dotColor: Record<string, string> = {
-    running: 'bg-success',
-    idle:    'bg-text-disabled',
-    error:   'bg-error',
+  if (isError) {
+    return (
+      <div style={cardStyle(true)}>
+        <div className="font-mono" style={labelStyle}>
+          STATUS
+        </div>
+        <div className="font-serif italic" style={{ fontSize: 13, color: 'var(--red)', marginTop: 10 }}>
+          can't reach the agent.
+        </div>
+      </div>
+    )
   }
+
+  const s = STATUS_COPY[data?.status ?? 'idle'] ?? STATUS_COPY.idle
+  const color =
+    s.tone === 'teal' ? 'var(--accent)' : s.tone === 'red' ? 'var(--red)' : 'var(--ink-muted)'
 
   return (
-    <Card>
-      <p className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">
-        Agent Status
-      </p>
-      {isLoading ? (
-        <div className="h-6 w-20 animate-pulse bg-hover-surface rounded" />
-      ) : isError ? (
-        <p className="text-sm text-error">Failed to load</p>
-      ) : (
-        <div className="flex items-center gap-2">
+    <div style={cardStyle(true)}>
+      <div className="font-mono" style={labelStyle}>
+        STATUS
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <div className="flex items-center" style={{ gap: 8 }}>
           <span
-            className={cn('w-2 h-2 rounded-full shrink-0',
-              dotColor[data?.status ?? 'idle'] ?? 'bg-text-disabled'
-            )}
+            className={s.tone === 'teal' ? 'liminal-breathe' : undefined}
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 99,
+              background: color,
+              boxShadow: s.tone === 'teal' ? `0 0 6px ${color}` : 'none',
+            }}
           />
-          <Badge variant={variantMap[data?.status ?? 'idle'] ?? 'default'}>
-            {data?.status ?? 'unknown'}
-          </Badge>
-          {data?.uptime_seconds != null && (
-            <span className="text-xs text-text-secondary font-mono ml-auto">
-              up {Math.floor(data.uptime_seconds / 3600)}h{' '}
-              {Math.floor((data.uptime_seconds % 3600) / 60)}m
-            </span>
-          )}
+          <span
+            className="font-serif italic"
+            style={{ fontSize: 16, color: 'var(--ink)', letterSpacing: -0.2 }}
+          >
+            {s.label}
+          </span>
         </div>
-      )}
-    </Card>
+        {data?.uptime_seconds != null && (
+          <div
+            className="font-mono"
+            style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 4 }}
+          >
+            up {fmtUptime(data.uptime_seconds)}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
+
+// ─── Budget bar ─────────────────────────────────────────────────────────────
 
 function QuotaBar({ spent, budget }: { spent: number; budget: number }) {
   const pct = Math.min((spent / budget) * 100, 100)
   const isWarning = pct >= 80
-  const isOver    = pct >= 100
+  const isOver = pct >= 100
+  const barColor = isOver ? 'var(--red)' : isWarning ? 'var(--amber)' : 'var(--accent)'
 
   return (
-    <div className="mt-6">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-text-secondary uppercase tracking-wide">Monthly budget</span>
-        <span className={cn(
-          'text-sm font-mono font-semibold',
-          isOver ? 'text-error' : isWarning ? 'text-warning' : 'text-text-primary'
-        )}>
-          ${spent.toFixed(2)} / ${budget.toFixed(2)}
-          <span className="text-text-secondary font-normal ml-1">({pct.toFixed(1)}%)</span>
+    <div
+      style={{
+        marginTop: 32,
+        padding: '18px 20px',
+        background: 'var(--bg-elev)',
+        border: '1px solid var(--line)',
+        borderRadius: 6,
+      }}
+    >
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
+        <span className="font-mono" style={labelStyle}>
+          MONTHLY BUDGET
+        </span>
+        <span
+          className="font-mono"
+          style={{
+            fontSize: 13,
+            color: isOver ? 'var(--red)' : isWarning ? 'var(--amber)' : 'var(--ink)',
+            fontWeight: 500,
+          }}
+        >
+          ${spent.toFixed(2)}
+          <span style={{ color: 'var(--ink-muted)', fontWeight: 400 }}> / ${budget.toFixed(2)}</span>
+          <span style={{ color: 'var(--ink-faint)', marginLeft: 6, fontSize: 11 }}>
+            {pct.toFixed(1)}%
+          </span>
         </span>
       </div>
-      <div className="w-full h-1.5 bg-hover-surface rounded-full overflow-hidden border border-border">
+      <div
+        style={{
+          width: '100%',
+          height: 4,
+          background: 'var(--bg-deep)',
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}
+      >
         <div
-          className={cn(
-            'h-full rounded-full transition-all duration-500',
-            isOver ? 'bg-error' : isWarning ? 'bg-warning' : 'bg-accent'
-          )}
-          style={{ width: `${pct}%` }}
+          style={{
+            height: '100%',
+            width: `${pct}%`,
+            background: barColor,
+            transition: 'width 0.5s ease, background 0.2s',
+          }}
         />
       </div>
       {isWarning && !isOver && (
-        <p className="text-xs text-warning mt-1.5">Approaching monthly budget limit.</p>
+        <p
+          className="font-serif italic"
+          style={{ fontSize: 12, color: 'var(--amber)', marginTop: 10 }}
+        >
+          we're getting close to the edge this month.
+        </p>
       )}
       {isOver && (
-        <p className="text-xs text-error mt-1.5">Monthly budget exceeded.</p>
+        <p
+          className="font-serif italic"
+          style={{ fontSize: 12, color: 'var(--red)', marginTop: 10 }}
+        >
+          the budget for this month is spent.
+        </p>
       )}
     </div>
   )
 }
 
-// Subset of config fields used in the overview page.
+// ─── Config subset ─────────────────────────────────────────────────────────
+
 interface ConfigOverview {
   provider?: { type?: string; model?: string }
   limits?: { monthly_budget_usd?: number }
 }
+
+// ─── Page ──────────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
   const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useMetrics()
@@ -130,76 +277,121 @@ export function OverviewPage() {
   const cfg = config as ConfigOverview | undefined
   const budget = cfg?.limits?.monthly_budget_usd ?? 0
 
-  const fmtCost = (usd: number) => `$${usd.toFixed(4)}`
-  const fmtTokens = (n: number) =>
-    n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+  const totalTokensToday = metrics
+    ? metrics.today.input_tokens + metrics.today.output_tokens
+    : 0
 
   return (
-    <div className="px-6 md:px-8 py-6 md:py-8 max-w-[1200px] mx-auto">
-      <div className="mb-8">
-        <h1 className="text-lg font-semibold text-text-primary">Overview</h1>
-        <p className="text-sm text-text-secondary mt-1">Agent health and usage at a glance.</p>
+    <div
+      style={{
+        padding: '28px 32px 40px',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}
+    >
+      {/* Preamble — matches MemoryPage / ConversationsPage pattern */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="flex items-baseline" style={{ gap: 14, marginBottom: 6 }}>
+          <LiminalGlyph size={20} animate />
+          <h1
+            className="font-serif"
+            style={{
+              margin: 0,
+              fontSize: 28,
+              fontWeight: 500,
+              color: 'var(--ink)',
+              letterSpacing: -0.6,
+            }}
+          >
+            <span className="italic" style={{ color: 'var(--accent)', fontWeight: 400 }}>
+              how I've been
+            </span>
+            <span style={{ color: 'var(--ink-muted)', fontWeight: 400 }}>&nbsp;·&nbsp;</span>
+            <span>today</span>
+          </h1>
+        </div>
+        <p
+          className="font-serif italic"
+          style={{
+            fontSize: 14.5,
+            color: 'var(--ink-soft)',
+            maxWidth: 640,
+            lineHeight: 1.55,
+            marginLeft: 34,
+            marginTop: 0,
+          }}
+        >
+          a quiet look at the shape of today — what was spent, what was remembered,
+          what was said.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Stat grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 10,
+        }}
+      >
         <StatusCard />
 
         <StatCard
-          label="Cost today"
-          value={metrics ? fmtCost(metrics.today.cost_usd) : '—'}
-          mono
+          label="COST TODAY"
+          value={metrics ? formatUSD(metrics.today.cost_usd) : '—'}
+          monoValue
           loading={metricsLoading}
           error={metricsError}
         />
         <StatCard
-          label="Cost this month"
-          value={metrics ? fmtCost(metrics.month.cost_usd) : '—'}
-          mono
+          label="COST THIS MONTH"
+          value={metrics ? formatUSD(metrics.month.cost_usd) : '—'}
+          monoValue
           loading={metricsLoading}
           error={metricsError}
         />
         <StatCard
-          label="Tokens today"
-          value={
+          label="TOKENS TODAY"
+          value={metrics ? formatTokens(totalTokensToday) : '—'}
+          hint={
             metrics
-              ? fmtTokens(metrics.today.input_tokens + metrics.today.output_tokens)
-              : '—'
-          }
-          sub={
-            metrics
-              ? `↑ ${fmtTokens(metrics.today.input_tokens)} in  ↓ ${fmtTokens(metrics.today.output_tokens)} out`
+              ? `${formatTokens(metrics.today.input_tokens)} in · ${formatTokens(metrics.today.output_tokens)} out`
               : undefined
           }
-          mono
+          monoValue
           loading={metricsLoading}
           error={metricsError}
         />
         <StatCard
-          label="Conversations today"
+          label="CONVERSATIONS"
           value={metrics?.today.conversations ?? '—'}
+          hint="today"
+          monoValue
           loading={metricsLoading}
           error={metricsError}
         />
         <StatCard
-          label="Messages today"
+          label="MESSAGES"
           value={metrics?.today.messages ?? '—'}
+          hint="today"
+          monoValue
           loading={metricsLoading}
           error={metricsError}
         />
         <StatCard
-          label="Memory entries"
+          label="MEMORY"
           value={memory?.items.length ?? '—'}
+          hint="things I remember"
+          monoValue
         />
         <StatCard
-          label="Active model"
+          label="MODEL"
           value={cfg?.provider?.model ?? '—'}
-          sub={cfg?.provider?.type ?? 'configure in Settings'}
+          hint={cfg?.provider?.type ?? 'configure in Settings'}
         />
       </div>
 
-      {budget > 0 && metrics && (
-        <QuotaBar spent={metrics.month.cost_usd} budget={budget} />
-      )}
+      {budget > 0 && metrics && <QuotaBar spent={metrics.month.cost_usd} budget={budget} />}
     </div>
   )
 }

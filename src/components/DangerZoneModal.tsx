@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button } from './ui/Button'
 
 interface DangerZoneModalProps {
   isOpen: boolean
@@ -9,6 +8,14 @@ interface DangerZoneModalProps {
   error?: string | null
 }
 
+/**
+ * DangerZoneModal — Liminal-styled destructive-action confirmation.
+ *
+ * The visual restraint is deliberate: in this design language we avoid
+ * red-flooded warning panels (they read as alarming OS dialogs). The
+ * confirmation type-`DELETE` interaction does the heavy lifting; red lives
+ * only on the final button + a thin left accent on the prompt card.
+ */
 export function DangerZoneModal({
   isOpen,
   onClose,
@@ -19,7 +26,6 @@ export function DangerZoneModal({
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Focus input when modal opens
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -31,13 +37,10 @@ export function DangerZoneModal({
     onClose()
   }
 
-  // Handle Escape key
   useEffect(() => {
     if (!isOpen) return
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleClose()
-      }
+      if (e.key === 'Escape') handleClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
@@ -46,10 +49,7 @@ export function DangerZoneModal({
   async function handleConfirm() {
     if (inputValue !== 'DELETE') return
     await onConfirm()
-    // Only clear input if modal stays open (error case); parent controls isOpen
-    if (!error) {
-      setInputValue('')
-    }
+    if (!error) setInputValue('')
   }
 
   if (!isOpen) return null
@@ -63,103 +63,159 @@ export function DangerZoneModal({
       aria-modal="true"
       aria-labelledby="danger-zone-modal-title"
     >
-      {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/70"
+        className="absolute inset-0"
         onClick={handleClose}
         aria-hidden="true"
+        style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
       />
 
-      {/* Dialog panel */}
-      <div className="relative z-10 w-full max-w-md mx-4 bg-[#111111] border border-[#222222] rounded-md">
-        {/* Red-bordered warning section */}
-        <div className="border border-error/30 rounded-md m-4 p-4 bg-error/5">
-          <div className="flex items-start gap-3">
-            {/* Warning icon */}
-            <div className="flex-shrink-0 mt-0.5">
-              <svg
-                className="w-5 h-5 text-error"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                />
-              </svg>
-            </div>
-
-            <div>
-              <h2
-                id="danger-zone-modal-title"
-                className="text-sm font-semibold text-error"
-              >
-                Reset Configuration
-              </h2>
-              <p className="text-sm text-text-secondary mt-1">
-                This will clear your provider settings and restart the setup
-                wizard. All other settings will be preserved.
-              </p>
-            </div>
-          </div>
+      <div
+        className="relative z-10 mx-4"
+        style={{
+          width: '100%',
+          maxWidth: 440,
+          background: 'var(--bg-elev)',
+          border: '1px solid var(--line-strong)',
+          borderRadius: 8,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.35)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header — serif italic title sets the tone, no warning icon needed */}
+        <div
+          style={{
+            padding: '20px 22px 16px',
+            borderBottom: '1px solid var(--line)',
+            borderLeft: '2px solid var(--red)',
+          }}
+        >
+          <h2
+            id="danger-zone-modal-title"
+            className="font-serif italic"
+            style={{
+              margin: 0,
+              fontSize: 19,
+              color: 'var(--ink)',
+              letterSpacing: -0.3,
+            }}
+          >
+            are you sure?
+          </h2>
+          <p
+            className="font-sans"
+            style={{
+              margin: '6px 0 0 0',
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: 'var(--ink-soft)',
+            }}
+          >
+            this clears the provider + model and restarts the setup wizard.
+            memory, conversations and knowledge stay intact.
+          </p>
         </div>
 
-        {/* Confirmation input */}
-        <div className="px-4 pb-4 space-y-3">
-          <div>
-            <label
-              htmlFor="danger-confirm-input"
-              className="block text-sm text-text-secondary mb-1.5"
-            >
-              Type{' '}
-              <span className="font-mono font-semibold text-text-primary">
-                DELETE
-              </span>{' '}
-              to confirm
-            </label>
-            <input
-              id="danger-confirm-input"
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              placeholder="DELETE"
-              autoComplete="off"
-              spellCheck={false}
-              disabled={isPending}
-              className="w-full bg-transparent border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-border-strong"
-            />
-          </div>
+        {/* Confirm body */}
+        <div style={{ padding: '18px 22px 20px' }}>
+          <label
+            htmlFor="danger-confirm-input"
+            className="font-mono"
+            style={{
+              display: 'block',
+              fontSize: 10.5,
+              letterSpacing: 0.7,
+              textTransform: 'uppercase',
+              color: 'var(--ink-muted)',
+              marginBottom: 8,
+            }}
+          >
+            type{' '}
+            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>DELETE</span>
+            {' '}to confirm
+          </label>
+          <input
+            id="danger-confirm-input"
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="DELETE"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={isPending}
+            className="font-mono"
+            style={{
+              width: '100%',
+              background: 'var(--bg-deep)',
+              border: '1px solid var(--line)',
+              borderRadius: 6,
+              padding: '9px 12px',
+              fontSize: 13,
+              color: 'var(--ink)',
+              outline: 'none',
+            }}
+          />
 
-          {/* Error message */}
           {error && (
-            <div className="rounded-md bg-error/10 border border-error/30 px-3 py-2">
-              <p className="text-xs text-error">{error}</p>
+            <div
+              className="font-sans"
+              style={{
+                marginTop: 12,
+                padding: '8px 12px',
+                background: 'color-mix(in srgb, var(--red) 8%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--red) 25%, transparent)',
+                borderRadius: 6,
+                fontSize: 12,
+                color: 'var(--red)',
+              }}
+            >
+              {error}
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <Button
+          <div className="flex items-center justify-end" style={{ gap: 8, marginTop: 18 }}>
+            <button
               type="button"
-              variant="secondary"
               onClick={handleClose}
               disabled={isPending}
+              className="font-sans"
+              style={{
+                background: 'transparent',
+                color: 'var(--ink-soft)',
+                border: '1px solid var(--line)',
+                borderRadius: 6,
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: isPending ? 'not-allowed' : 'pointer',
+                opacity: isPending ? 0.5 : 1,
+              }}
             >
-              Cancel
-            </Button>
-            <Button
+              cancel
+            </button>
+            <button
               type="button"
-              variant="destructive"
               onClick={handleConfirm}
               disabled={!confirmed || isPending}
+              className="font-sans"
+              style={{
+                background: confirmed && !isPending
+                  ? 'var(--red)'
+                  : 'color-mix(in srgb, var(--red) 25%, transparent)',
+                color: confirmed && !isPending ? 'var(--bg-elev)' : 'var(--ink-muted)',
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: confirmed && !isPending ? 'pointer' : 'not-allowed',
+                transition: 'background 0.15s',
+              }}
             >
-              {isPending ? 'Resetting...' : 'Confirm Reset'}
-            </Button>
+              {isPending ? 'resetting…' : 'reset'}
+            </button>
           </div>
         </div>
       </div>

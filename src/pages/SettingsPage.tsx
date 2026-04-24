@@ -26,6 +26,7 @@ import {
   EMBEDDING_MODEL_CHANGE_WARNING,
   type EmbeddingProviderId,
 } from '../design/embeddingCatalog'
+import { LiminalGlyph } from '../components/liminal/LiminalGlyph'
 
 type Tab = 'agent' | 'provider' | 'channel' | 'tools' | 'memory' | 'web'
 
@@ -158,23 +159,51 @@ export function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="px-6 md:px-10 py-8 max-w-2xl mx-auto">
-        <div className="h-7 w-32 animate-pulse bg-hover-surface rounded mb-6" />
-        <div className="space-y-4">
-          {[1, 2, 3].map(k => <div key={k} className="h-14 animate-pulse bg-surface rounded-md border border-border" />)}
+      <div style={{ padding: '28px 32px 40px', maxWidth: 760, margin: '0 auto' }}>
+        <div className="font-serif italic" style={{ fontSize: 14, color: 'var(--ink-muted)' }}>
+          loading the knobs…
         </div>
       </div>
     )
   }
 
   return (
-    <div className="px-6 md:px-10 py-8 max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-lg font-semibold text-text-primary">Settings</h1>
-          <p className="text-sm text-text-secondary mt-0.5">Configure the agent without editing YAML.</p>
-        </div>
+    <div style={{ padding: '28px 32px 40px', maxWidth: 760, margin: '0 auto' }}>
+      {/* Preamble — matches MemoryPage / ConversationsPage / Overview */}
+      <div className="flex items-baseline" style={{ gap: 14, marginBottom: 6 }}>
+        <LiminalGlyph size={20} animate />
+        <h1
+          className="font-serif"
+          style={{
+            margin: 0,
+            fontSize: 28,
+            fontWeight: 500,
+            color: 'var(--ink)',
+            letterSpacing: -0.6,
+          }}
+        >
+          <span className="italic" style={{ color: 'var(--accent)', fontWeight: 400 }}>
+            tune me
+          </span>
+        </h1>
+      </div>
+      <p
+        className="font-serif italic"
+        style={{
+          fontSize: 14.5,
+          color: 'var(--ink-soft)',
+          maxWidth: 640,
+          lineHeight: 1.55,
+          marginLeft: 34,
+          marginTop: 0,
+          marginBottom: 28,
+        }}
+      >
+        every knob that shapes how I think, hear, and remember — without editing yaml.
+      </p>
+
+      {/* Save action */}
+      <div className="flex items-center justify-end" style={{ marginBottom: 18 }}>
         <Button
           onClick={handleSubmit(onSubmit, (errs) => {
             // Surface the first validation error so save failures aren't silent.
@@ -203,22 +232,44 @@ export function SettingsPage() {
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-surface rounded-lg p-1 border border-border">
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              'flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-              activeTab === tab.id
-                ? 'bg-hover-surface text-text-primary'
-                : 'text-text-secondary hover:text-text-primary'
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Tabs — Liminal pill row, mono uppercase, accent underline on active */}
+      <div
+        className="flex font-mono"
+        style={{
+          gap: 4,
+          marginBottom: 22,
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: 0,
+        }}
+      >
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '8px 14px 10px',
+                fontSize: 11,
+                letterSpacing: 0.7,
+                textTransform: 'uppercase',
+                color: isActive ? 'var(--ink)' : 'var(--ink-muted)',
+                cursor: 'pointer',
+                position: 'relative',
+                marginBottom: -1,
+                borderBottom: isActive
+                  ? '1px solid var(--accent)'
+                  : '1px solid transparent',
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+            >
+              {tab.label.toLowerCase()}
+            </button>
+          )
+        })}
       </div>
 
       {/* Content */}
@@ -530,37 +581,68 @@ export function SettingsPage() {
         </div>
       )}
 
-      {/* ── Danger Zone ── */}
-      <div className="mt-12 pt-8 border-t border-border">
-        <div className="rounded-md border border-error/30 bg-error/5 p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-sm font-semibold text-error">Danger Zone</h2>
-              <p className="text-sm text-text-secondary mt-1">
-                Irreversible actions that affect your agent configuration.
-              </p>
-            </div>
-          </div>
+      {/* ── Danger Zone — Liminal restraint: red lives only on the action ── */}
+      <div style={{ marginTop: 48, paddingTop: 28, borderTop: '1px solid var(--line)' }}>
+        <p
+          className="font-serif italic"
+          style={{ fontSize: 13, color: 'var(--ink-muted)', marginBottom: 16 }}
+        >
+          what lives here can't be undone — measure twice.
+        </p>
 
-          <div className="mt-4 flex items-center justify-between gap-4 rounded-md border border-error/20 bg-[#0a0a0a] px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-text-primary">Reset Configuration</p>
-              <p className="text-xs text-text-secondary mt-0.5">
-                Clear provider settings and restart the setup wizard.
-              </p>
+        <div
+          className="flex items-center justify-between"
+          style={{
+            gap: 16,
+            padding: '14px 18px',
+            background: 'var(--bg-elev)',
+            border: '1px solid var(--line)',
+            borderLeft: '2px solid var(--red)',
+            borderRadius: 6,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 13.5, color: 'var(--ink)', fontWeight: 500 }}>
+              reset configuration
             </div>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setDangerError(null)
-                setDangerModalOpen(true)
-              }}
+            <div
+              className="font-serif italic"
+              style={{ fontSize: 12.5, color: 'var(--ink-muted)', marginTop: 3 }}
             >
-              Reset Configuration
-            </Button>
+              clears the provider + model and restarts the setup wizard. memory,
+              conversations, and knowledge stay intact.
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDangerError(null)
+              setDangerModalOpen(true)
+            }}
+            className="font-sans"
+            style={{
+              background: 'transparent',
+              color: 'var(--red)',
+              border: '1px solid color-mix(in srgb, var(--red) 35%, transparent)',
+              borderRadius: 6,
+              padding: '7px 14px',
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)'
+              e.currentTarget.style.borderColor = 'var(--red)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--red) 35%, transparent)'
+            }}
+          >
+            reset
+          </button>
         </div>
       </div>
 
