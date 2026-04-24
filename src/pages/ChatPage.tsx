@@ -337,6 +337,18 @@ export function ChatPage() {
     return (params.get('conversation_id') ?? params.get('resume') ?? '').trim()
   }, [])
 
+  // Pre-loaded prompt: opened from another page (e.g. MCP catalog "let the
+  // agent install" button) with `/chat?prompt=...` to inject a curated first
+  // message. Read once at mount so reactive URL changes don't re-fire it.
+  // Only honored on a fresh chat (no conversation_id) — never overrides an
+  // existing thread the user is resuming.
+  const initialPrompt = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    const params = new URLSearchParams(window.location.search)
+    const raw = params.get('prompt') ?? ''
+    return raw.trim()
+  }, [])
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isWaiting, setIsWaiting] = useState(false)
@@ -415,6 +427,8 @@ export function ChatPage() {
       tool_name?: string
       repetitions?: number
       sample_input?: string
+      limit_seconds?: number
+      stop_reason?: string
     }
 
     switch (msg.type) {
@@ -552,6 +566,28 @@ export function ChatPage() {
         if (toolName && reps > 0) {
           setLoopWarning({ toolName, repetitions: reps })
         }
+        break
+      }
+
+      case 'turn_timeout_reached': {
+        // Backend killed the turn at limits.total_timeout. The follow-up
+        // turn_end frame clears isWaiting / turnStatus.active, so here we
+        // only surface a clear message in the thread explaining why the
+        // agent stopped mid-thought.
+        const limit = typeof msg.limit_seconds === 'number' ? msg.limit_seconds : 0
+        const iter = typeof msg.iteration === 'number' ? msg.iteration : 0
+        setMessages((prev) => [
+          ...prev,
+          bakeReasoningIfFirst({
+            id: uuid(),
+            role: 'assistant',
+            content:
+              `(turn aborted — ${limit}s total-time limit reached after iteration ${iter}. ` +
+              "raise `limits.total_timeout` in config if you need longer turns.)",
+            timestamp: new Date(),
+            isStreaming: false,
+          }),
+        ])
         break
       }
 
@@ -694,6 +730,42 @@ export function ChatPage() {
       cancelled = true
     }
   }, [resumeConvID])
+
+  // ── Auto-send the URL-injected prompt once, on a fresh chat
+  // Triggered when ChatPage opens with `/chat?prompt=...` from another page
+  // (e.g. MCP catalog "let the agent install"). Fires once after the WS is
+  // connected; never overrides an existing conversation. URL is cleaned so a
+  // refresh doesn't re-send.
+  const autoSentRef = useRef(false)
+  useEffect(() => {
+    if (autoSentRef.current) return
+    if (!initialPrompt) return
+    if (resumeConvID) return // never auto-send on a resumed thread
+    if (status !== 'connected') return // wait for WS handshake
+    autoSentRef.current = true
+
+    // Render the user message locally + ship it.
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: uuid(),
+        role: 'user',
+        content: initialPrompt,
+        timestamp: new Date(),
+      },
+    ])
+    setIsWaiting(true)
+    setError(null)
+    setAutoScroll(true)
+    resetTurnReasoning()
+    send({ type: 'message', text: initialPrompt })
+
+    // Strip the prompt from the URL so a reload doesn't trigger a second send.
+    const params = new URLSearchParams(window.location.search)
+    params.delete('prompt')
+    const cleanQs = params.toString()
+    window.history.replaceState(null, '', window.location.pathname + (cleanQs ? '?' + cleanQs : ''))
+  }, [initialPrompt, resumeConvID, status, send, resetTurnReasoning])
 
   // ── Auto-scroll
   useEffect(() => {

@@ -44,6 +44,16 @@ export interface MetricsSnapshot {
     cost_usd: number
     conversations: number
     messages: number
+    /** Input tokens of the most recent LLM call across all conversations.
+     *  Used by the sidebar to show last-turn context utilisation rather
+     *  than today's running total. 0 when no calls have been recorded. */
+    last_call_input_tokens?: number
+    /** Model that produced last_call_input_tokens. Empty when no calls. */
+    last_call_model?: string
+    /** Max context window (in tokens) of last_call_model, fetched from the
+     *  provider's live model list. 0 when the model is unknown. The sidebar
+     *  uses this as the denominator for the context utilisation bar. */
+    last_call_context_length?: number
   }
   month: {
     input_tokens: number
