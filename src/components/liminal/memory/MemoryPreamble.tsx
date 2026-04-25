@@ -79,6 +79,20 @@ export function MemoryEmpty({ query }: MemoryEmptyProps) {
           ? 'nothing I remember matches that.'
           : "nothing here yet — we've only just met."}
       </div>
+      {!query && (
+        <div
+          className="font-serif italic"
+          style={{
+            fontSize: 13.5,
+            color: 'var(--ink-faint)',
+            maxWidth: 420,
+            lineHeight: 1.55,
+          }}
+        >
+          tell me things to remember in conversation — facts about you, your projects,
+          your preferences. try saying <span style={{ color: 'var(--ink-soft)' }}>"remember that I work in Buenos Aires."</span>
+        </div>
+      )}
     </div>
   )
 }

@@ -2,12 +2,6 @@ interface ConversationsPreambleProps {
   count: number
 }
 
-/**
- * Liminal-voice header for the Conversations list. Mirrors MemoryPreamble's
- * serif-italic aspirational voice; copy is conversational and first-person
- * ("las conversaciones que hemos tenido"). Empty state swaps in an
- * explicitly neutral line — no dedicated illustration in v1.
- */
 export function ConversationsPreamble({ count }: ConversationsPreambleProps) {
   const isEmpty = count === 0
   return (
@@ -17,8 +11,8 @@ export function ConversationsPreamble({ count }: ConversationsPreambleProps) {
         style={{ fontSize: 22, lineHeight: 1.3, color: 'var(--ink)' }}
       >
         {isEmpty
-          ? 'Nada aún.'
-          : 'Las conversaciones que hemos tenido.'}
+          ? 'nothing yet.'
+          : 'the conversations we have had.'}
       </div>
       <div
         className="font-sans"
@@ -31,8 +25,8 @@ export function ConversationsPreamble({ count }: ConversationsPreambleProps) {
         }}
       >
         {isEmpty
-          ? 'Empezá un chat y lo encontrás acá la próxima vez que vuelvas.'
-          : 'Retomá desde donde dejaste, revisitá lo que dijimos, o archivá lo que ya no te sirve.'}
+          ? 'start a chat and you will find it here the next time you come back.'
+          : 'pick up where you left off, revisit what we said, or archive what you no longer need.'}
       </div>
     </div>
   )

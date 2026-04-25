@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import type { KnowledgeDoc } from '../../../design/memoryMocks'
 import { KnowledgeCard } from './KnowledgeCard'
 import type { Density } from './MemoryCard'
+import { LiminalGlyph } from '../LiminalGlyph'
 
 interface KnowledgeViewProps {
   density: Density
@@ -177,7 +178,52 @@ export function KnowledgeView({
           tone="error"
         />
       ) : docs.length === 0 ? (
-        <KnowledgeStatus text="Nothing indexed yet — drop a file above to start." />
+        <div
+          className="flex flex-col items-center"
+          style={{ padding: 60, textAlign: 'center', gap: 14 }}
+        >
+          <LiminalGlyph size={36} animate={false} />
+          <div
+            className="font-serif italic"
+            style={{ fontSize: 17, color: 'var(--ink-muted)' }}
+          >
+            no documents indexed.
+          </div>
+          <div
+            className="font-serif italic"
+            style={{
+              fontSize: 13.5,
+              color: 'var(--ink-faint)',
+              maxWidth: 440,
+              lineHeight: 1.55,
+            }}
+          >
+            drop a PDF, markdown, or text file — i'll read it and recall passages
+            from it during our conversations.
+          </div>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="font-mono"
+            style={{
+              fontSize: 11,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              padding: '10px 22px',
+              borderRadius: 4,
+              background: 'var(--accent)',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'opacity 120ms ease',
+              marginTop: 6,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            upload a document →
+          </button>
+        </div>
       ) : (
         <div className="grid" style={{ gap: density === 'dense' ? 8 : 12 }}>
           {docs.map((k) => (

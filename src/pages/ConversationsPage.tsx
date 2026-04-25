@@ -86,7 +86,7 @@ export function ConversationsPage() {
 
   const handleOpen = (id: string) => navigate(`/chat?conversation_id=${encodeURIComponent(id)}`)
   const handleDelete = (id: string) => {
-    if (window.confirm('¿Eliminar esta conversación? Podés restaurarla dentro de los próximos 30 días desde la base de datos.')) {
+    if (window.confirm('Delete this conversation? You can restore it from the database within the next 30 days.')) {
       deleteConv(id)
     }
   }
@@ -102,7 +102,7 @@ export function ConversationsPage() {
         <div className="mb-6" style={{ maxWidth: 360 }}>
           <input
             type="text"
-            placeholder="Buscar por título, canal o mensaje…"
+            placeholder="Search by title, channel, or message…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="font-sans w-full"
@@ -122,14 +122,60 @@ export function ConversationsPage() {
       {/* Loading */}
       {isLoading && (
         <div className="font-serif italic" style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
-          Cargando…
+          loading…
         </div>
       )}
 
       {/* Error */}
       {isError && (
         <div className="font-sans" style={{ fontSize: 13, color: 'var(--red)' }}>
-          No pude cargar las conversaciones.
+          Failed to load conversations.
+        </div>
+      )}
+
+      {/* Empty — first run, no conversations yet */}
+      {!isLoading && !isError && items.length === 0 && (
+        <div
+          className="flex flex-col items-center"
+          style={{
+            gap: 18,
+            padding: '40px 20px 60px',
+            textAlign: 'center',
+          }}
+        >
+          <p
+            className="font-serif italic"
+            style={{
+              fontSize: 14.5,
+              color: 'var(--ink-soft)',
+              maxWidth: 420,
+              lineHeight: 1.55,
+              margin: 0,
+            }}
+          >
+            every chat with the agent lives here. start one and it will show up automatically.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/chat')}
+            className="font-mono"
+            style={{
+              fontSize: 11,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              padding: '10px 22px',
+              borderRadius: 4,
+              background: 'var(--accent)',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'opacity 120ms ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            start chatting →
+          </button>
         </div>
       )}
 
@@ -164,7 +210,7 @@ export function ConversationsPage() {
           className="font-serif italic"
           style={{ fontSize: 13, color: 'var(--ink-muted)', marginTop: 12 }}
         >
-          Nada coincide con "{search}".
+          Nothing matches "{search}".
         </div>
       )}
 
@@ -175,7 +221,7 @@ export function ConversationsPage() {
           style={{ fontSize: 11, color: 'var(--ink-muted)' }}
         >
           <span>
-            Página {page + 1} de {totalPages} · {data?.total} totales
+            Page {page + 1} of {totalPages} · {data?.total} total
           </span>
           <div className="flex" style={{ gap: 8 }}>
             <button
@@ -184,7 +230,7 @@ export function ConversationsPage() {
               disabled={page === 0}
               style={paginationBtnStyle(page === 0)}
             >
-              ← Anterior
+              ← Previous
             </button>
             <button
               type="button"
@@ -192,7 +238,7 @@ export function ConversationsPage() {
               disabled={page >= totalPages - 1}
               style={paginationBtnStyle(page >= totalPages - 1)}
             >
-              Siguiente →
+              Next →
             </button>
           </div>
         </div>
