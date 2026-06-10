@@ -45,6 +45,7 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   openai:     'OpenAI',
   gemini:     'Gemini',
   openrouter: 'OpenRouter',
+  minimax:    'MiniMax',
   ollama:     'Ollama',
 }
 
