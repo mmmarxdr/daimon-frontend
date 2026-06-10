@@ -494,13 +494,18 @@ export function ChatPage({
         // exists, merge the new input in; otherwise push a fresh one.
         const callId = msg.tool_call_id ?? ''
         setMessages((prev) => {
+          // Finalize any streaming assistant text block: a tool starting means
+          // the preceding text phase is complete.
+          const withFinalized = prev.map((m): ChatMessage =>
+            m.role === 'assistant' && m.isStreaming ? { ...m, isStreaming: false } : m,
+          )
           const existingIdx = callId
-            ? prev.findIndex(
+            ? withFinalized.findIndex(
                 (m) => m.toolCall?.tool_call_id === callId && !m.toolCall.done,
               )
             : -1
           if (existingIdx !== -1) {
-            return prev.map((m, i): ChatMessage => {
+            return withFinalized.map((m, i): ChatMessage => {
               if (i !== existingIdx || !m.toolCall) return m
               return {
                 ...m,
@@ -513,7 +518,7 @@ export function ChatPage({
             })
           }
           return [
-            ...prev,
+            ...withFinalized,
             bakeReasoningIfFirst({
               id: uuid(),
               role: 'tool',
@@ -682,13 +687,10 @@ export function ChatPage({
       }
 
       case 'done': {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1]
-          if (last?.role === 'assistant' && last.isStreaming) {
-            return [...prev.slice(0, -1), { ...last, isStreaming: false }]
-          }
-          return prev
-        })
+        // Belt-and-suspenders: clear isStreaming on ALL messages so no cursor
+        // can survive a completed turn (handles any edge-case the tool_start
+        // finalization might have missed).
+        setMessages((prev) => prev.map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m)))
         setIsWaiting(false)
         break
       }
