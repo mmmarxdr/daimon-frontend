@@ -3,7 +3,7 @@ import { MASKED_REGEX } from '../lib/mask'
 
 export { MASKED_REGEX }
 
-export const PROVIDER_NAMES = ['anthropic', 'openai', 'gemini', 'openrouter', 'ollama'] as const
+export const PROVIDER_NAMES = ['anthropic', 'openai', 'gemini', 'openrouter', 'minimax', 'ollama'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
 
 const providerCredsSchema = z.object({
@@ -25,6 +25,7 @@ export const configSchema = z.object({
     openai:     providerCredsSchema,
     gemini:     providerCredsSchema,
     openrouter: providerCredsSchema,
+    minimax:    providerCredsSchema,
     ollama:     providerCredsSchema,
   }),
   models: z.object({
@@ -113,6 +114,7 @@ export const DEFAULT_CONFIG: ConfigFormData = {
     openai:     { api_key: '', base_url: '' },
     gemini:     { api_key: '', base_url: '' },
     openrouter: { api_key: '', base_url: '' },
+    minimax:    { api_key: '', base_url: 'https://api.minimax.io/v1' },
     ollama:     { api_key: '', base_url: 'http://localhost:11434' },
   },
   models: { default: { provider: 'openrouter', model: 'anthropic/claude-haiku-4.5' } },

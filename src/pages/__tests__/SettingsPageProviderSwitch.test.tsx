@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { SetupProvider } from '../../contexts/SetupContext'
 
 // Mock @tanstack/react-virtual (jsdom has no layout engine)
@@ -43,6 +44,7 @@ function makeConfig(provider = 'openrouter') {
       openai:     { api_key: '', base_url: '' },
       gemini:     { api_key: '', base_url: '' },
       openrouter: { api_key: 'sk-or-real', base_url: '' },
+      minimax:    { api_key: '', base_url: 'https://api.minimax.io/v1' },
       ollama:     { api_key: '', base_url: '' },
     },
     models: { default: { provider, model: 'openrouter/auto' } },
@@ -61,9 +63,11 @@ function renderSettings() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <SetupProvider>
-        <SettingsPage />
-      </SetupProvider>
+      <MemoryRouter>
+        <SetupProvider>
+          <SettingsPage />
+        </SetupProvider>
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
@@ -105,6 +109,33 @@ describe('SettingsPage.providerSwitch.PMD-4a', () => {
     await waitFor(() => {
       const calls = (getProviderModels as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0])
       expect(calls).toContain('anthropic')
+    }, { timeout: 3000 })
+  })
+})
+
+describe('SettingsPage.providerSwitch.minimax', () => {
+  it('minimax is selectable as active provider and triggers getProviderModels("minimax")', async () => {
+    ;(api.config as ReturnType<typeof vi.fn>).mockResolvedValue(makeConfig('openrouter'))
+    ;(api.updateConfig as ReturnType<typeof vi.fn>).mockResolvedValue({ message: 'ok' })
+
+    renderSettings()
+
+    await waitFor(() => screen.getByRole('button', { name: /^provider$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^provider$/i }))
+
+    // The Active provider select must offer a "minimax" option.
+    await waitFor(() => {
+      const sel = document.querySelector('select[name="models.default.provider"]') as HTMLSelectElement
+      expect(sel).toBeTruthy()
+      expect([...sel.options].map(o => o.value)).toContain('minimax')
+    })
+
+    const providerSelect = document.querySelector('select[name="models.default.provider"]') as HTMLSelectElement
+    fireEvent.change(providerSelect, { target: { value: 'minimax' } })
+
+    await waitFor(() => {
+      const calls = (getProviderModels as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0])
+      expect(calls).toContain('minimax')
     }, { timeout: 3000 })
   })
 })
