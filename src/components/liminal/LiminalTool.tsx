@@ -11,6 +11,11 @@ interface LiminalToolProps {
 
 type ToolStatus = 'done' | 'running' | 'error'
 
+/** How many lines of output to show inline (collapsed) before the expand affordance. */
+const PEEK_LINES = 4
+/** Per-line character cap in the peek to avoid horizontal overflow. */
+const PEEK_LINE_MAX = 200
+
 function statusOf(tool: ToolCall): ToolStatus {
   if (!tool.done) return 'running'
   if (tool.isError) return 'error'
@@ -36,7 +41,8 @@ function buildPreview(input: string, maxLen = 60): string {
 
 function deriveStats(output?: string): { lines?: number; matches?: number } {
   if (!output) return {}
-  const lines = output.split('\n').length
+  // Strip trailing newlines so the "N lines" chip matches the inline peek count.
+  const lines = output.replace(/\n+$/, '').split('\n').length
   return { lines }
 }
 
@@ -62,6 +68,22 @@ export function LiminalTool({ tool, onOpen }: LiminalToolProps) {
   const stats = useMemo(() => deriveStats(tool.output), [tool.output])
   const duration = formatDuration(tool.duration_ms)
 
+  // Inline output peek (collapsed state): first PEEK_LINES lines, with a
+  // "+N lines (click to expand)" affordance when there is more.
+  const outputLines = useMemo(
+    () => (tool.output ? tool.output.replace(/\n+$/, '').split('\n') : []),
+    [tool.output],
+  )
+  const hiddenLines = Math.max(0, outputLines.length - PEEK_LINES)
+  const peekText = useMemo(
+    () =>
+      outputLines
+        .slice(0, PEEK_LINES)
+        .map((l) => (l.length > PEEK_LINE_MAX ? l.slice(0, PEEK_LINE_MAX) + '…' : l))
+        .join('\n'),
+    [outputLines],
+  )
+
   return (
     <div className="flex my-1.5">
       {/* Status rail */}
@@ -77,6 +99,7 @@ export function LiminalTool({ tool, onOpen }: LiminalToolProps) {
         <button
           type="button"
           onClick={() => tool.done && setExpanded((e) => !e)}
+          aria-expanded={tool.done ? expanded : undefined}
           className="flex items-center gap-2.5 w-full text-left font-mono"
           style={{ padding: '3px 0', fontSize: 12, cursor: tool.done ? 'pointer' : 'default' }}
           disabled={!tool.done}
@@ -113,6 +136,38 @@ export function LiminalTool({ tool, onOpen }: LiminalToolProps) {
             </span>
           )}
         </button>
+        {!expanded && tool.done && tool.output && (
+          <button
+            type="button"
+            data-testid="tool-peek"
+            onClick={() => setExpanded(true)}
+            aria-expanded={expanded}
+            aria-label="Expand tool output"
+            className="block w-full text-left font-mono"
+            style={{ cursor: 'pointer', marginTop: 2, paddingLeft: 2 }}
+          >
+            <pre
+              style={{
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                color: isError ? 'var(--red)' : 'var(--ink-faint)',
+                fontSize: 10.5,
+                lineHeight: 1.5,
+              }}
+            >
+              {peekText}
+            </pre>
+            {hiddenLines > 0 && (
+              <span
+                data-testid="tool-expand-more"
+                style={{ fontSize: 10.5, color: 'var(--ink-muted)' }}
+              >
+                … +{hiddenLines} {hiddenLines === 1 ? 'line' : 'lines'} (click to expand)
+              </span>
+            )}
+          </button>
+        )}
         {expanded && tool.done && (
           <div
             className="font-mono mt-1.5 rounded-[5px]"

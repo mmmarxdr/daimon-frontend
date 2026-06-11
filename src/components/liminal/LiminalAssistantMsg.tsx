@@ -1,11 +1,15 @@
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import type { ToolCall } from '../../types/chat'
 import { LiminalGlyph } from './LiminalGlyph'
 import { LiminalSpeaker } from './LiminalSpeaker'
 import { LiminalReasoning } from './LiminalReasoning'
 import { LiminalTool } from './LiminalTool'
+import { LiminalToolGroup, type ToolGroupItem } from './LiminalToolGroup'
 import { LiminalMd } from './LiminalMd'
 import { LiminalTimeline, type TimelineEvent } from './LiminalTimeline'
+
+/** Runs of this many or more consecutive tool calls collapse into a group. */
+const GROUP_THRESHOLD = 5
 
 export type AssistantBlock =
   | { kind: 'text'; content: string; streaming?: boolean }
@@ -24,6 +28,46 @@ interface LiminalAssistantMsgProps {
   time?: string
   /** True while the whole turn is still streaming (animates the glyph). */
   streaming?: boolean
+}
+
+// renderBlocks walks the block list and collapses runs of GROUP_THRESHOLD or
+// more consecutive tool blocks into a single LiminalToolGroup. Shorter runs and
+// non-tool blocks render inline as before.
+function renderBlocks(blocks: AssistantBlock[]): ReactNode[] {
+  const out: ReactNode[] = []
+  let i = 0
+  while (i < blocks.length) {
+    const b = blocks[i]
+    if (b.kind === 'tool') {
+      const run: ToolGroupItem[] = []
+      const start = i
+      while (i < blocks.length) {
+        const tb = blocks[i]
+        if (tb.kind !== 'tool') break
+        run.push({ tool: tb.tool, onOpen: tb.onOpen })
+        i++
+      }
+      if (run.length >= GROUP_THRESHOLD) {
+        out.push(<LiminalToolGroup key={`g${start}`} items={run} />)
+      } else {
+        run.forEach((it, k) =>
+          out.push(<LiminalTool key={`t${start}-${k}`} tool={it.tool} onOpen={it.onOpen} />),
+        )
+      }
+      continue
+    }
+    if (b.kind === 'text') {
+      out.push(
+        <div key={`x${i}`} style={{ margin: '8px 0' }}>
+          <LiminalMd content={b.content} streaming={b.streaming} />
+        </div>,
+      )
+    } else if (b.kind === 'timeline') {
+      out.push(<LiminalTimeline key={`tl${i}`} events={b.events} />)
+    }
+    i++
+  }
+  return out
 }
 
 function LiminalAssistantMsgImpl({
@@ -60,22 +104,7 @@ function LiminalAssistantMsgImpl({
           hasTextStarted={hasTextStarted}
         />
       )}
-      {blocks.map((b, i) => {
-        if (b.kind === 'tool') {
-          return <LiminalTool key={i} tool={b.tool} onOpen={b.onOpen} />
-        }
-        if (b.kind === 'text') {
-          return (
-            <div key={i} style={{ margin: '8px 0' }}>
-              <LiminalMd content={b.content} streaming={b.streaming} />
-            </div>
-          )
-        }
-        if (b.kind === 'timeline') {
-          return <LiminalTimeline key={i} events={b.events} />
-        }
-        return null
-      })}
+      {renderBlocks(blocks)}
     </div>
   )
 }
