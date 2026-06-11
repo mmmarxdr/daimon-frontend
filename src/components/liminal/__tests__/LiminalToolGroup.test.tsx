@@ -67,4 +67,18 @@ describe('LiminalAssistantMsg — tool-run grouping', () => {
     expect(screen.getByText('tool_0')).toBeInTheDocument()
     expect(screen.getByText('tool_5')).toBeInTheDocument()
   })
+
+  it('groups tools even when blank/whitespace-only text blocks are interspersed', () => {
+    // Some models emit tiny empty text segments between tool calls; they render
+    // nothing and must not break the run (which would defeat grouping).
+    const blocks: AssistantBlock[] = []
+    for (let i = 0; i < 6; i++) {
+      blocks.push(toolBlock(`itool_${i}`))
+      blocks.push({ kind: 'text', content: i % 2 ? '  ' : '\n' })
+    }
+    render(<LiminalAssistantMsg blocks={blocks} />)
+
+    expect(screen.getByTestId('tool-group-header').textContent).toContain('6 tools')
+    expect(screen.queryByText('itool_0')).toBeNull()
+  })
 })

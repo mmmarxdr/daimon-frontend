@@ -30,28 +30,37 @@ interface LiminalAssistantMsgProps {
   streaming?: boolean
 }
 
+// A text block renders nothing when it is empty or whitespace-only. Some models
+// emit such tiny segments between tool calls; they must not break an otherwise
+// consecutive tool run (which would defeat grouping), so we drop them up front.
+function isVisibleBlock(b: AssistantBlock): boolean {
+  return b.kind !== 'text' || b.content.trim().length > 0
+}
+
 // renderBlocks walks the block list and collapses runs of GROUP_THRESHOLD or
 // more consecutive tool blocks into a single LiminalToolGroup. Shorter runs and
 // non-tool blocks render inline as before.
 function renderBlocks(blocks: AssistantBlock[]): ReactNode[] {
+  const visible = blocks.filter(isVisibleBlock)
   const out: ReactNode[] = []
   let i = 0
-  while (i < blocks.length) {
-    const b = blocks[i]
+  while (i < visible.length) {
+    const b = visible[i]
     if (b.kind === 'tool') {
       const run: ToolGroupItem[] = []
-      const start = i
-      while (i < blocks.length) {
-        const tb = blocks[i]
+      while (i < visible.length) {
+        const tb = visible[i]
         if (tb.kind !== 'tool') break
         run.push({ tool: tb.tool, onOpen: tb.onOpen })
         i++
       }
       if (run.length >= GROUP_THRESHOLD) {
-        out.push(<LiminalToolGroup key={`g${start}`} items={run} />)
+        out.push(<LiminalToolGroup key={`g-${run[0].tool.tool_call_id}`} items={run} />)
       } else {
-        run.forEach((it, k) =>
-          out.push(<LiminalTool key={`t${start}-${k}`} tool={it.tool} onOpen={it.onOpen} />),
+        run.forEach((it) =>
+          out.push(
+            <LiminalTool key={`t-${it.tool.tool_call_id}`} tool={it.tool} onOpen={it.onOpen} />,
+          ),
         )
       }
       continue
